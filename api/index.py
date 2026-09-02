@@ -18,7 +18,7 @@ if str(API_DIR) not in sys.path:
 from scanner import analyse_stock
 from universe import NIFTY_50
 
-app = FastAPI(title="StockLens AI", version="0.7.0")
+app = FastAPI(title="StockLens AI", version="0.8.0")
 
 STATIC = ROOT / "static"
 if STATIC.exists():
@@ -32,7 +32,7 @@ def home():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.7.0"}
+    return {"status": "ok", "version": "0.8.0"}
 
 
 def _within_price(price, min_price: float, max_price: float) -> bool:
@@ -296,6 +296,33 @@ def backtest_monthly(
         horizon_days=horizon_days,
         min_technical_score=min_technical_score,
     )
+
+
+
+@app.get("/api/research/intraday-compare")
+def research_intraday_compare(
+    limit_universe: int = Query(5, ge=3, le=5),
+    period: str = Query("1mo"),
+):
+    from strategy_lab import compare_intraday
+    return {
+        "engine":"intraday",
+        "comparison":compare_intraday(_representative_universe(limit_universe),period),
+        "warning":"Candidate rules are experimental. Do not treat an in-sample improvement as validation."
+    }
+
+
+@app.get("/api/research/monthly-compare")
+def research_monthly_compare(
+    limit_universe: int = Query(5, ge=3, le=10),
+    period: str = Query("2y"),
+):
+    from strategy_lab import compare_monthly
+    return {
+        "engine":"monthly",
+        "comparison":compare_monthly(_representative_universe(limit_universe),period),
+        "warning":"This remains a technical proxy and is not full-model validation."
+    }
 
 
 @app.get("/api/portfolio")
