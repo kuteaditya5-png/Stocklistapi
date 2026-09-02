@@ -18,7 +18,7 @@ if str(API_DIR) not in sys.path:
 from scanner import analyse_stock
 from universe import NIFTY_50
 
-app = FastAPI(title="StockLens AI", version="0.6.1")
+app = FastAPI(title="StockLens AI", version="0.7.0")
 
 STATIC = ROOT / "static"
 if STATIC.exists():
@@ -32,7 +32,7 @@ def home():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.6.1"}
+    return {"status": "ok", "version": "0.7.0"}
 
 
 def _within_price(price, min_price: float, max_price: float) -> bool:
@@ -242,6 +242,60 @@ def intraday(
             "or investment advice."
         ),
     }
+
+
+
+def _representative_universe(limit: int) -> list[str]:
+    """Stable spread across the NIFTY 50 list instead of only the first names."""
+    limit = max(1, min(limit, len(NIFTY_50)))
+    if limit >= len(NIFTY_50):
+        return NIFTY_50[:]
+    positions = [
+        round(i * (len(NIFTY_50) - 1) / max(1, limit - 1))
+        for i in range(limit)
+    ]
+    seen = set()
+    result = []
+    for pos in positions:
+        symbol = NIFTY_50[pos]
+        if symbol not in seen:
+            seen.add(symbol)
+            result.append(symbol)
+    return result
+
+
+@app.get("/api/backtest/intraday")
+def backtest_intraday(
+    limit_universe: int = Query(3, ge=3, le=5),
+    period: str = Query("1mo"),
+    max_hold_bars: int = Query(12, ge=3, le=24),
+):
+    from backtest import run_intraday_backtest
+
+    symbols = _representative_universe(limit_universe)
+    return run_intraday_backtest(
+        symbols=symbols,
+        period=period,
+        max_hold_bars=max_hold_bars,
+    )
+
+
+@app.get("/api/backtest/monthly")
+def backtest_monthly(
+    limit_universe: int = Query(5, ge=3, le=10),
+    period: str = Query("2y"),
+    horizon_days: int = Query(21, ge=10, le=30),
+    min_technical_score: float = Query(65, ge=50, le=90),
+):
+    from backtest import run_monthly_technical_backtest
+
+    symbols = _representative_universe(limit_universe)
+    return run_monthly_technical_backtest(
+        symbols=symbols,
+        period=period,
+        horizon_days=horizon_days,
+        min_technical_score=min_technical_score,
+    )
 
 
 @app.get("/api/portfolio")
