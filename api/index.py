@@ -5,10 +5,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-# Vercel loads api/index.py as an entry file rather than a normal Python package.
-# Add the api directory to sys.path so helper modules can be imported reliably.
 API_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = API_DIR.parent
+
 if str(API_DIR) not in sys.path:
     sys.path.insert(0, str(API_DIR))
 
@@ -16,24 +18,42 @@ from scanner import analyse_stock
 from universe import NIFTY_50
 
 app = FastAPI(
-    title="StockLens AI API",
-    version="0.3.1",
-    description="Stock ranking and research API for StockLens AI.",
+    title="StockLens AI",
+    version="0.3.2",
+    description="Stock ranking and research dashboard for the Indian market.",
 )
+
+STATIC_DIR = PROJECT_DIR / "static"
+INDEX_FILE = PROJECT_DIR / "index.html"
+
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/")
+def dashboard():
+    if INDEX_FILE.exists():
+        return FileResponse(INDEX_FILE, media_type="text/html")
+
+    return {
+        "app": "StockLens AI",
+        "version": "0.3.2",
+        "status": "running",
+        "error": "index.html was not found in the repository root",
+    }
 
 
 @app.get("/api")
 def api_home():
     return {
         "app": "StockLens AI",
-        "version": "0.3.1",
+        "version": "0.3.2",
         "status": "running",
         "deployment": "Vercel",
         "endpoints": [
             "/api/health",
             "/api/stock/RELIANCE",
             "/api/ranking?top=5&limit_universe=5",
-            "/docs",
         ],
         "disclaimer": "Research tool only; not investment advice.",
     }
@@ -43,8 +63,10 @@ def api_home():
 def health():
     return {
         "status": "ok",
-        "version": "0.3.1",
+        "version": "0.3.2",
         "deployment": "vercel",
+        "dashboard_file": INDEX_FILE.exists(),
+        "static_folder": STATIC_DIR.exists(),
     }
 
 
