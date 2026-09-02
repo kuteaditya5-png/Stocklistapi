@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StockLens AI</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">StockLens <span>AI</span></div>
+      <div class="subtitle">Analyze. Rank. Invest Smarter.</div>
+    </div>
+    <div class="status"><span class="dot"></span> Live scanner</div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">INDIAN EQUITY RESEARCH</p>
+        <h1>Today's strongest stock candidates, ranked by data.</h1>
+        <p class="hero-copy">
+          StockLens combines fundamentals, financial health, valuation,
+          technical momentum, management signals and risk into one score.
+        </p>
+      </div>
+      <div class="hero-score">
+        <span>Model</span>
+        <strong>0–100</strong>
+        <small>StockLens Score</small>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div>
+        <label for="universe">Stocks to scan</label>
+        <select id="universe">
+          <option value="5">5 — Quick test</option>
+          <option value="10" selected>10</option>
+          <option value="20">20 — Vercel scan limit</option>
+        </select>
+      </div>
+      <div>
+        <label for="top">Show top</label>
+        <select id="top">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+      <button id="scanBtn" onclick="loadRanking()">Scan Market</button>
+    </section>
+
+    <section id="summary" class="summary hidden">
+      <div class="summary-box"><span>Scanned</span><strong id="scanned">-</strong></div>
+      <div class="summary-box"><span>Top Candidate</span><strong id="leader">-</strong></div>
+      <div class="summary-box"><span>Best Score</span><strong id="bestScore">-</strong></div>
+      <div class="summary-box"><span>Buy Candidates</span><strong id="buyCount">-</strong></div>
+    </section>
+
+    <section class="section-heading">
+      <div>
+        <p class="eyebrow">RANKING</p>
+        <h2>Top Picks</h2>
+      </div>
+      <span id="updated"></span>
+    </section>
+
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <h3>Scanning stocks...</h3>
+      <p>Fetching market data and calculating StockLens scores.</p>
+    </div>
+
+    <div id="error" class="error hidden"></div>
+    <section id="welcome" class="welcome">
+      <h3>Dashboard ready</h3>
+      <p>Select how many stocks you want to scan and click <b>Scan Market</b>.</p>
+    </section>
+    <section id="cards" class="cards"></section>
+
+    <p class="disclaimer">
+      StockLens AI is a research and ranking tool. The Vercel starter scans up to 20 stocks per request. Scores and signals are model-based
+      and are not investment advice or guaranteed returns.
+    </p>
+  </main>
+
+<script>
+function esc(value) {
+  const div = document.createElement("div");
+  div.textContent = value ?? "";
+  return div.innerHTML;
+}
+
+function signalClass(signal) {
+  if (signal === "STRONG CANDIDATE") return "strong";
+  if (signal === "BUY CANDIDATE") return "buy";
+  if (signal === "WATCHLIST") return "watch";
+  if (signal === "WEAK") return "weak";
+  return "avoid";
+}
+
+function scoreBar(label, value) {
+  const safe = Math.max(0, Math.min(100, Number(value || 0)));
+  return `
+    <div class="metric">
+      <div class="metric-head"><span>${label}</span><strong>${safe.toFixed(0)}</strong></div>
+      <div class="track"><div class="fill" style="width:${safe}%"></div></div>
+    </div>`;
+}
+
+function stockCard(stock, rank) {
+  const b = stock.score_breakdown;
+  const positives = (stock.positives || []).length
+    ? stock.positives.map(x => `<li>${esc(x)}</li>`).join("")
+    : "<li>No major positive signal available.</li>";
+  const flags = (stock.red_flags || []).length
+    ? stock.red_flags.map(x => `<li>${esc(x)}</li>`).join("")
+    : "<li>No major starter-model red flags.</li>";
+
+  return `
+    <article class="stock-card">
+      <div class="card-top">
+        <div class="rank">#${rank}</div>
+        <div class="identity">
+          <h3>${esc(stock.symbol)}</h3>
+          <p>${esc(stock.company_name || "")}</p>
+        </div>
+        <div class="price">
+          <span>Current Price</span>
+          <strong>${stock.current_price ? "₹" + Number(stock.current_price).toLocaleString("en-IN", {maximumFractionDigits:2}) : "N/A"}</strong>
+        </div>
+        <div class="main-score">
+          <strong>${Number(stock.stocklens_score).toFixed(1)}</strong><span>/100</span>
+        </div>
+      </div>
+
+      <div class="badges">
+        <span class="badge ${signalClass(stock.recommendation)}">${esc(stock.recommendation)}</span>
+        <span class="risk">Risk: <b>${esc(stock.risk_level)}</b></span>
+      </div>
+
+      <div class="details">
+        <div class="metrics">
+          ${scoreBar("Fundamentals", b.fundamentals)}
+          ${scoreBar("Financial Health", b.financial_health)}
+          ${scoreBar("Valuation", b.valuation)}
+          ${scoreBar("Technicals", b.technicals)}
+          ${scoreBar("Management", b.management)}
+          ${scoreBar("Risk Quality", b.risk)}
+        </div>
+
+        <div class="reasons">
+          <div class="reason positive">
+            <h4>Why it ranks well</h4>
+            <ul>${positives}</ul>
+          </div>
+          <div class="reason warning">
+            <h4>Warnings</h4>
+            <ul>${flags}</ul>
+          </div>
+        </div>
+      </div>
+    </article>`;
+}
+
+async function loadRanking() {
+  const limit = document.getElementById("universe").value;
+  const top = document.getElementById("top").value;
+  const btn = document.getElementById("scanBtn");
+  const loading = document.getElementById("loading");
+  const cards = document.getElementById("cards");
+  const error = document.getElementById("error");
+
+  btn.disabled = true;
+  btn.textContent = "Scanning...";
+  loading.classList.remove("hidden");
+  error.classList.add("hidden");
+  cards.innerHTML = "";
+  const welcome = document.getElementById("welcome");
+  if (welcome) welcome.classList.add("hidden");
+
+  try {
+    const res = await fetch(`/api/ranking?top=${top}&limit_universe=${limit}`);
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    const data = await res.json();
+
+    const rows = data.top || [];
+    cards.innerHTML = rows.map((s, i) => stockCard(s, i + 1)).join("");
+
+    document.getElementById("scanned").textContent = data.scanned ?? 0;
+    document.getElementById("leader").textContent = rows[0]?.symbol || "-";
+    document.getElementById("bestScore").textContent =
+      rows[0] ? Number(rows[0].stocklens_score).toFixed(1) : "-";
+    document.getElementById("buyCount").textContent =
+      rows.filter(x => ["BUY CANDIDATE", "STRONG CANDIDATE"].includes(x.recommendation)).length;
+    document.getElementById("updated").textContent =
+      "Updated " + new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    document.getElementById("summary").classList.remove("hidden");
+
+    if (!rows.length) {
+      error.textContent = "No stock results were returned. Check the API/server logs.";
+      error.classList.remove("hidden");
+    }
+  } catch (e) {
+    error.textContent = "Unable to load ranking: " + e.message;
+    error.classList.remove("hidden");
+  } finally {
+    loading.classList.add("hidden");
+    btn.disabled = false;
+    btn.textContent = "Scan Market";
+  }
+}
+
+// Auto-scan disabled for fast page load.
+// Click 'Scan Market' to start.
+</script>
+</body>
+</html>
