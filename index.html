@@ -1,0 +1,620 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StockLens AI</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div>
+    <b>StockLens <span>AI</span></b>
+    <small>Analyze. Rank. Trade Smarter.</small>
+  </div>
+  <i>● Data-driven research</i>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button>
+    <button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button>
+    <button class="tab" onclick="mode('backtest',this)">📊 Accuracy & Backtest</button>
+    <button class="tab" onclick="mode('lab',this)">🧪 Strategy Lab</button>
+  </div>
+
+  <section class="hero">
+    <label id="eyebrow">1-MONTH INVESTMENT FINDER</label>
+    <h1 id="headline">Find strong 1-month stock candidates.</h1>
+    <p id="copy">
+      Enter your investment amount and StockLens will rank the strongest 1-month candidates.
+    </p>
+  </section>
+
+  <section id="pricePanel" class="price-panel hide">
+    <div class="price-head">
+      <div>
+        <small>INTRADAY STOCK PRICE FILTER</small>
+        <h3 id="priceText">Any affordable price</h3>
+      </div>
+      <div class="price-note">This filter applies only to Intraday Trading.</div>
+    </div>
+
+    <div class="dual-slider">
+      <input id="minPrice" type="range" min="0" max="5000" step="50" value="0" oninput="priceChanged('min')">
+      <input id="maxPrice" type="range" min="0" max="5000" step="50" value="5000" oninput="priceChanged('max')">
+    </div>
+
+    <div class="range-labels">
+      <span>₹0</span>
+      <span>₹5,000+</span>
+    </div>
+
+    <div class="chips">
+      <button onclick="preset(0,5000)">Any Affordable</button>
+      <button onclick="preset(0,200)">Under ₹200</button>
+      <button onclick="preset(0,500)">Under ₹500</button>
+      <button onclick="preset(500,1000)">₹500–₹1,000</button>
+      <button onclick="preset(1000,2500)">₹1,000–₹2,500</button>
+    </div>
+  </section>
+
+  <section id="mainControls" class="controls">
+    <div>
+      <small>Capital / investment amount</small>
+      <div class="money">₹ <input id="amount" type="number" value="5000" min="1000"></div>
+    </div>
+
+    <div id="riskbox">
+      <small>Risk profile</small>
+      <select id="risk">
+        <option>low</option>
+        <option selected>moderate</option>
+        <option>high</option>
+      </select>
+    </div>
+
+    <div id="riskpct" class="hide">
+      <small>Risk per trade</small>
+      <select id="rp">
+        <option value=".5">0.5%</option>
+        <option value="1" selected>1%</option>
+        <option value="1.5">1.5%</option>
+        <option value="2">2%</option>
+      </select>
+    </div>
+
+    <div>
+      <small>Stocks to analyze</small>
+      <select id="limit">
+        <option>5</option>
+        <option selected>10</option>
+        <option>20</option>
+      </select>
+    </div>
+
+    <button id="go" onclick="run()">Find Best Stocks</button>
+  </section>
+
+  <section id="backtestControls" class="controls backtest-controls hide">
+    <div>
+      <small>Engine to test</small>
+      <select id="btEngine" onchange="backtestEngineChanged()">
+        <option value="intraday" selected>Intraday — same live rules</option>
+        <option value="monthly">1-Month — technical proxy</option>
+      </select>
+    </div>
+
+    <div>
+      <small>Representative stocks</small>
+      <select id="btLimit">
+        <option value="3" selected>3 — Fast</option>
+        <option value="5">5 — Better sample</option>
+      </select>
+    </div>
+
+    <div id="btWindowBox">
+      <small>Historical window</small>
+      <select id="btWindow">
+        <option value="5d">5 trading days</option>
+        <option value="1mo" selected>About 1 month</option>
+      </select>
+    </div>
+
+    <div id="btMonthlyBox" class="hide">
+      <small>1-month history</small>
+      <select id="btMonthlyPeriod">
+        <option value="1y">1 year</option>
+        <option value="2y" selected>2 years</option>
+      </select>
+    </div>
+
+    <button onclick="runBacktest()">Run Backtest</button>
+  </section>
+
+  <section id="labControls" class="controls hide">
+    <div>
+      <small>Strategy to improve</small>
+      <select id="labEngine">
+        <option value="intraday" selected>Intraday</option>
+        <option value="monthly">1-Month technical proxy</option>
+      </select>
+    </div>
+    <div>
+      <small>Representative stocks</small>
+      <select id="labLimit"><option value="3">3 — Fast</option><option value="5" selected>5 — Better sample</option></select>
+    </div>
+    <div><small>Comparison</small><div class="money">v0.7 baseline → v0.8 candidate</div></div>
+    <button onclick="runLab()">Compare Strategies</button><button class="optimizer-btn" onclick="runOptimizer()">Run v0.9 Walk-Forward</button>
+  </section>
+
+  <div id="status" class="status">
+    Choose your settings and start a scan.
+  </div>
+
+  <section>
+    <div class="title">
+      <div>
+        <label id="listlabel">1-MONTH SHORTLIST</label>
+        <h2 id="listtitle">Top 3 Candidates</h2>
+      </div>
+      <small id="updated"></small>
+    </div>
+    <div id="cards"></div>
+  </section>
+
+  <p class="foot">
+    Forecasts, signals and historical tests are research outputs, not guaranteed returns or investment advice.
+  </p>
+</main>
+
+<script>
+let current='invest';
+
+const fmt=n=>new Intl.NumberFormat(
+  'en-IN',
+  {style:'currency',currency:'INR',maximumFractionDigits:0}
+).format(n);
+
+function effectiveMax(){
+  const v=+document.getElementById('maxPrice').value;
+  return v>=5000 ? 0 : v;
+}
+
+function priceChanged(which){
+  const minEl=document.getElementById('minPrice');
+  const maxEl=document.getElementById('maxPrice');
+  let lo=+minEl.value, hi=+maxEl.value;
+
+  if(lo>hi){
+    if(which==='min') maxEl.value=lo;
+    else minEl.value=hi;
+  }
+  
+  updatePriceText();
+}
+
+function preset(lo,hi){
+  document.getElementById('minPrice').value=lo;
+  document.getElementById('maxPrice').value=hi;
+  updatePriceText();
+}
+
+function updatePriceText(){
+  const lo=+document.getElementById('minPrice').value;
+  const hi=+document.getElementById('maxPrice').value;
+  let text='';
+
+  if(lo===0 && hi>=5000) text='Any affordable price';
+  else if(lo===0) text=`Up to ${fmt(hi)}`;
+  else if(hi>=5000) text=`${fmt(lo)} and above`;
+  else text=`${fmt(lo)} – ${fmt(hi)}`;
+
+  document.getElementById('priceText').textContent=text;
+}
+
+function mode(m,b){
+  current=m;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.getElementById('cards').innerHTML='';
+
+  const day=m==='day';
+  const backtest=m==='backtest';
+  const lab=m==='lab';
+
+  document.getElementById('mainControls').classList.toggle('hide',backtest || lab);
+  document.getElementById('backtestControls').classList.toggle('hide',!backtest);
+  document.getElementById('labControls').classList.toggle('hide',!lab);
+  document.getElementById('riskbox').classList.toggle('hide',day || backtest || lab);
+  document.getElementById('riskpct').classList.toggle('hide',!day);
+  document.getElementById('pricePanel').classList.toggle('hide',!day);
+
+  if(lab){
+    document.getElementById('eyebrow').textContent='STRATEGY RESEARCH LAB';
+    document.getElementById('headline').textContent='Research strategies with walk-forward validation.';
+    document.getElementById('copy').textContent='The v0.9 optimizer separates training, validation and unseen test periods so we can reject strategies that only look good on the data used to build them.';
+    document.getElementById('listlabel').textContent='OLD VS NEW';
+    document.getElementById('listtitle').textContent='Strategy Comparison';
+    document.getElementById('status').innerHTML='Run a comparison. A candidate is <b>not adopted automatically</b> just because it looks better in one historical sample.';
+    return;
+  }
+
+  if(backtest){
+    document.getElementById('eyebrow').textContent='MEASURED HISTORICAL PERFORMANCE';
+    document.getElementById('headline').textContent='Test the model instead of guessing its accuracy.';
+    document.getElementById('copy').textContent='Run historical tests and measure hit rate, expectancy, profit factor and NIFTY-relative performance. Intraday uses the same live rule set; the 1-month test is clearly marked as a technical-only proxy.';
+    document.getElementById('listlabel').textContent='BACKTEST RESULTS';
+    document.getElementById('listtitle').textContent='Model Performance';
+    document.getElementById('status').innerHTML='<b>No accuracy percentage is assumed.</b> Run a backtest to calculate results from historical data.';
+    return;
+  }
+
+  document.getElementById('eyebrow').textContent=
+    day?'LIVE INTRADAY FINDER':'1-MONTH INVESTMENT FINDER';
+
+  document.getElementById('headline').textContent=
+    day?'Find intraday setups inside your price range.':'Find strong 1-month stock candidates.';
+
+  document.getElementById('copy').textContent=
+    day
+    ?'Filter stocks by price, then scan for BUY, SELL or NO TRADE using VWAP, EMA, RSI, volume and breakouts.'
+    :'Enter your investment amount and StockLens will rank the strongest candidates for the next month.';
+
+  document.getElementById('go').textContent=
+    day?'Scan Intraday Setups':'Find Best Stocks';
+
+  document.getElementById('listlabel').textContent=
+    day?'INTRADAY SHORTLIST':'1-MONTH SHORTLIST';
+
+  document.getElementById('listtitle').textContent=
+    day?'Top Affordable Trade Setups':'Top 3 Candidates';
+
+  document.getElementById('status').textContent='Choose your settings and start a scan.';
+}
+
+function backtestEngineChanged(){
+  const monthly=document.getElementById('btEngine').value==='monthly';
+  document.getElementById('btWindowBox').classList.toggle('hide',monthly);
+  document.getElementById('btMonthlyBox').classList.toggle('hide',!monthly);
+}
+
+async function run(){
+  const amount=+document.getElementById('amount').value;
+  const limit=document.getElementById('limit').value;
+  const minPrice=+document.getElementById('minPrice').value;
+  const maxPrice=effectiveMax();
+  const st=document.getElementById('status');
+
+  if(amount<1000){
+    alert('Enter at least ₹1,000');
+    return;
+  }
+
+  st.textContent=current==='day'
+    ?'Searching the NIFTY 50 for intraday setups inside your price range…'
+    :'Analyzing stocks for the 1-month ranking…';
+
+  document.getElementById('cards').innerHTML='';
+
+  try{
+    let url;
+
+    if(current==='day'){
+      url=`/api/intraday?capital=${amount}&risk_pct=${document.getElementById('rp').value}&limit_universe=${limit}&min_price=${minPrice}&max_price=${maxPrice}`;
+    }else{
+      url=`/api/portfolio?amount=${amount}&risk=${document.getElementById('risk').value}&limit_universe=${limit}`;
+    }
+
+    const r=await fetch(url);
+    const d=await r.json();
+    if(!r.ok) throw Error(d.detail||'Scan failed');
+
+    document.getElementById('updated').textContent=
+      'Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+    if(current==='day'){
+      st.innerHTML=
+        `Analyzed <b>${d.analysed}</b> matching candidate(s) · `+
+        `<b>${d.matched_price_filter}</b> passed the exact price/affordability check · `+
+        `<b>${d.top.length}</b> trade setup(s).`;
+
+      document.getElementById('cards').innerHTML=d.top.length
+      ? d.top.map((x,i)=>`
+        <article>
+          <div class="top">
+            <div>
+              <em>#${i+1}</em>
+              <h3>${x.symbol}</h3>
+              <small>Stock price ₹${Number(x.price).toFixed(2)}</small>
+            </div>
+            <div class="score">${x.signal}<small>${x.confidence}% model score</small></div>
+          </div>
+
+          <div class="forecast">
+            <div><small>Entry</small><b>₹${x.entry}</b></div>
+            <div><small>Stop Loss</small><b>₹${x.stop_loss}</b></div>
+            <div><small>Target 1</small><b>₹${x.target1}</b></div>
+            <div><small>Target 2</small><b>₹${x.target2}</b></div>
+          </div>
+
+          <div class="afford">
+            <div><small>Max affordable shares</small><b>${x.max_affordable_qty}</b></div>
+            <div><small>Risk-based quantity</small><b>${x.quantity}</b></div>
+            <div><small>Capital used</small><b>${fmt(x.capital_used)}</b></div>
+            <div><small>Cash left</small><b>${fmt(x.cash_left)}</b></div>
+          </div>
+
+          <div class="meta">
+            <span>Capital ${fmt(x.capital)}</span>
+            <span>Risk ${x.risk_pct}%</span>
+            <span>Signal ${new Date(x.signal_time).toLocaleTimeString()}</span>
+          </div>
+
+          <div class="why">
+            <div>
+              <b>Signal reasons</b>
+              <ul>${x.reasons.map(v=>`<li>${v}</li>`).join('')}</ul>
+            </div>
+            <div>
+              <b>Risk rule</b>
+              <ul>
+                <li>Exit if stop-loss is hit.</li>
+                <li>Model score is not probability of profit.</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+      `).join('')
+      : `<div class="empty"><b>NO TRADE</b><br>No stock in your selected price range produced a strong enough setup.</div>`;
+
+    }else{
+      st.innerHTML=
+        `Analyzed <b>${d.analysed}</b> stock(s) · showing the strongest 1-month candidates.`;
+
+      document.getElementById('cards').innerHTML=d.top.length
+      ? d.top.map((x,i)=>{
+          const e=x.one_month_estimate;
+          const a=x.affordability;
+          return `
+          <article>
+            <div class="top">
+              <div>
+                <em>#${i+1}</em>
+                <h3>${x.symbol}</h3>
+                <small>${x.company_name||''}</small>
+              </div>
+              <div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100 model score</small></div>
+            </div>
+
+            <div class="afford">
+              <div><small>Current share price</small><b>${fmt(a.share_price)}</b></div>
+              <div><small>Approx. whole shares</small><b>${a.affordable_qty}</b></div>
+            </div>
+
+            <div class="forecast">
+              <div><small>Your capital</small><b>${fmt(amount)}</b></div>
+              <div><small>Estimated 1-month value</small><b>${fmt(e.estimated_value_low)} – ${fmt(e.estimated_value_high)}</b></div>
+              <div><small>Estimated return range</small><b>${e.expected_return_low_pct}% to ${e.expected_return_high_pct}%</b></div>
+              <div><small>Downside scenario</small><b>${fmt(e.downside_value)}</b></div>
+            </div>
+
+            <div class="meta">
+              <span>Model score confidence ${e.confidence}%</span>
+              <span>${x.recommendation}</span>
+              <span>Risk ${x.risk_level||'—'}</span>
+            </div>
+
+            <div class="why">
+              <div>
+                <b>Why it ranks well</b>
+                <ul>${(x.positives||[]).slice(0,4).map(v=>`<li>${v}</li>`).join('')||'<li>Composite model score.</li>'}</ul>
+              </div>
+              <div>
+                <b>Warnings</b>
+                <ul>${(x.red_flags||[]).slice(0,3).map(v=>`<li>${v}</li>`).join('')||'<li>No major model warning.</li>'}</ul>
+              </div>
+            </div>
+          </article>`;
+        }).join('')
+      : `<div class="empty"><b>No candidate found.</b><br>Try scanning a wider universe.</div>`;
+    }
+
+  }catch(e){
+    st.textContent='Scan failed: '+e.message;
+  }
+}
+
+function metric(label,value,sub=''){
+  return `<div class="metric"><small>${label}</small><strong>${value}</strong>${sub?`<span>${sub}</span>`:''}</div>`;
+}
+
+function renderBreakdown(title,rows,monthly=false){
+  if(!rows || !rows.length) return '';
+  return `<div class="breakdown-block">
+    <h3>${title}</h3>
+    <div class="table-wrap"><table>
+      <thead><tr>${
+        monthly
+        ?'<th>Group</th><th>Samples</th><th>Positive 1M</th><th>Beat NIFTY</th><th>Avg return</th>'
+        :'<th>Group</th><th>Signals</th><th>T1 hit</th><th>Positive</th><th>Avg R</th>'
+      }</tr></thead>
+      <tbody>${rows.map(r=>monthly
+        ?`<tr><td>${r.group}</td><td>${r.samples}</td><td>${r.positive_after_1m_rate}%</td><td>${r.beat_nifty_rate}%</td><td>${r.avg_return_pct}%</td></tr>`
+        :`<tr><td>${r.group}</td><td>${r.signals}</td><td>${r.target1_hit_rate}%</td><td>${r.positive_outcome_rate}%</td><td>${r.avg_r}R</td></tr>`
+      ).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+async function runBacktest(){
+  const engine=document.getElementById('btEngine').value;
+  const limit=document.getElementById('btLimit').value;
+  const st=document.getElementById('status');
+  const cards=document.getElementById('cards');
+
+  st.innerHTML='<b>Running historical backtest…</b> This can take a little longer than a normal scan.';
+  cards.innerHTML='';
+
+  try{
+    let url;
+    if(engine==='intraday'){
+      const period=document.getElementById('btWindow').value;
+      url=`/api/backtest/intraday?limit_universe=${limit}&period=${period}&max_hold_bars=12`;
+    }else{
+      const period=document.getElementById('btMonthlyPeriod').value;
+      url=`/api/backtest/monthly?limit_universe=${limit}&period=${period}&horizon_days=21&min_technical_score=65`;
+    }
+
+    const r=await fetch(url);
+    const d=await r.json();
+    if(!r.ok) throw Error(d.detail||'Backtest failed');
+
+    document.getElementById('updated').textContent=
+      'Tested '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+    if(engine==='intraday'){
+      const m=d.metrics;
+      st.innerHTML=`Measured from <b>${m.signals_tested}</b> historical signal(s) across <b>${d.symbols_tested.join(', ')}</b>. This is historical performance, not a future guarantee.`;
+
+      cards.innerHTML=`
+        <article class="accuracy-card">
+          <div class="scope good-scope"><b>✓ SAME LIVE INTRADAY RULES</b><span>${d.scope}</span></div>
+
+          <div class="metrics-grid">
+            ${metric('Signals tested',m.signals_tested)}
+            ${metric('Target 1 hit rate',m.target1_hit_rate+'%','T1 before expiry')}
+            ${metric('Positive outcome rate',m.positive_outcome_rate+'%')}
+            ${metric('Expectancy',m.avg_r+'R','Average per signal')}
+            ${metric('Profit factor',m.profit_factor)}
+            ${metric('Max drawdown',m.max_drawdown_r+'R')}
+          </div>
+
+          <div class="outcome-strip">
+            <span>🎯 T1 hits <b>${m.target1_hits}</b></span>
+            <span>🛑 Stops <b>${m.stop_hits}</b></span>
+            <span>⏱ Timeouts <b>${m.timeouts}</b></span>
+            <span>Avg winner <b>${m.avg_winner_r}R</b></span>
+            <span>Avg loser <b>${m.avg_loser_r}R</b></span>
+          </div>
+
+          ${renderBreakdown('BUY vs SELL',d.by_signal)}
+          ${renderBreakdown('Performance by model score',d.by_confidence)}
+          ${renderBreakdown('Performance by stock price',d.by_price)}
+          ${renderBreakdown('Performance by time of day',d.by_time)}
+
+          <div class="caveat"><b>Backtest limitations</b><ul>${d.limitations.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        </article>`;
+
+    }else{
+      const m=d.metrics;
+      st.innerHTML=`Measured from <b>${m.samples_tested}</b> non-overlapping historical sample(s) across <b>${d.symbols_tested.join(', ')}</b>.`;
+
+      cards.innerHTML=`
+        <article class="accuracy-card">
+          <div class="scope proxy-scope">
+            <b>⚠ 1-MONTH TECHNICAL PROXY</b>
+            <span>${d.scope}</span>
+          </div>
+
+          <div class="metrics-grid">
+            ${metric('Samples tested',m.samples_tested)}
+            ${metric('Positive after ~1M',m.positive_after_1m_rate+'%')}
+            ${metric('Beat NIFTY',m.beat_nifty_rate+'%')}
+            ${metric('Average stock return',m.avg_stock_return_pct+'%')}
+            ${metric('NIFTY average',m.avg_nifty_return_pct+'%')}
+            ${metric('Average excess return',m.avg_excess_return_pct+'%')}
+          </div>
+
+          ${renderBreakdown('Performance by technical score',d.by_score,true)}
+
+          <div class="caveat important"><b>Why this is not full-model accuracy</b><ul>${d.limitations.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        </article>`;
+    }
+
+  }catch(e){
+    st.textContent='Backtest failed: '+e.message;
+  }
+}
+
+
+function compareMetric(label,oldv,newv,suffix=''){
+  const oldN=Number(oldv), newN=Number(newv);
+  const better=(label.includes('Drawdown')) ? newN<oldN : newN>oldN;
+  return `<div class="compare-row"><span>${label}</span><b>${oldv}${suffix}</b><b class="${better?'better':'worse'}">${newv}${suffix}</b></div>`;
+}
+
+async function runLab(){
+  const engine=document.getElementById('labEngine').value;
+  const limit=document.getElementById('labLimit').value;
+  const st=document.getElementById('status'), cards=document.getElementById('cards');
+  st.innerHTML='<b>Testing baseline against v0.8 candidate…</b>';
+  cards.innerHTML='';
+  try{
+    const url=engine==='intraday'
+      ?`/api/research/intraday-compare?limit_universe=${limit}&period=1mo`
+      :`/api/research/monthly-compare?limit_universe=${limit}&period=2y`;
+    const r=await fetch(url),d=await r.json();
+    if(!r.ok) throw Error(d.detail||'Comparison failed');
+    const o=d.comparison.old,n=d.comparison.candidate;
+    document.getElementById('updated').textContent='Compared '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    if(engine==='intraday'){
+      st.innerHTML=`Baseline <b>${o.signals}</b> signals vs candidate <b>${n.signals}</b>. Judge quality and sample size together.`;
+      cards.innerHTML=`<article class="accuracy-card">
+        <div class="scope good-scope"><b>🧪 EXPERIMENTAL v0.8 FILTERS</b><span>Not yet adopted as the live engine</span></div>
+        <div class="compare-head"><span>Metric</span><b>v0.7</b><b>v0.8 candidate</b></div>
+        ${compareMetric('Signals',o.signals,n.signals)}
+        ${compareMetric('T1 hit rate',o.t1_rate,n.t1_rate,'%')}
+        ${compareMetric('Positive rate',o.positive_rate,n.positive_rate,'%')}
+        ${compareMetric('Expectancy',o.avg_r,n.avg_r,'R')}
+        ${compareMetric('Profit factor',o.profit_factor,n.profit_factor)}
+        ${compareMetric('Max Drawdown',o.max_drawdown_r,n.max_drawdown_r,'R')}
+        <div class="caveat"><b>Candidate filters</b><ul>${d.comparison.candidate_rules.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        <div class="caveat important"><b>Validation rule</b><p>${d.warning} We should only promote these rules after they also improve on a separate unseen period.</p></div>
+      </article>`;
+    }else{
+      st.innerHTML=`Baseline <b>${o.samples}</b> samples vs candidate <b>${n.samples}</b>. This remains a technical proxy.`;
+      cards.innerHTML=`<article class="accuracy-card">
+        <div class="scope proxy-scope"><b>🧪 1-MONTH CANDIDATE FILTER</b><span>Technical proxy only</span></div>
+        <div class="compare-head"><span>Metric</span><b>v0.7</b><b>v0.8 candidate</b></div>
+        ${compareMetric('Samples',o.samples,n.samples)}
+        ${compareMetric('Positive after 1M',o.positive_rate,n.positive_rate,'%')}
+        ${compareMetric('Beat NIFTY',o.beat_nifty_rate,n.beat_nifty_rate,'%')}
+        ${compareMetric('Average return',o.avg_return,n.avg_return,'%')}
+        ${compareMetric('Average excess',o.avg_excess,n.avg_excess,'%')}
+        <div class="caveat"><b>Candidate filters</b><ul>${d.comparison.candidate_rules.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        <div class="caveat important"><b>Important</b><p>${d.warning}</p></div>
+      </article>`;
+    }
+  }catch(e){st.textContent='Comparison failed: '+e.message}
+}
+
+
+async function runOptimizer(){
+ const limit=Math.max(5,+document.getElementById('labLimit').value),st=document.getElementById('status'),cards=document.getElementById('cards');
+ st.innerHTML='<b>Running walk-forward optimizer…</b> This uses several years of historical data.';cards.innerHTML='';
+ try{
+  const r=await fetch(`/api/research/walk-forward?limit_universe=${limit}&period=5y`),d=await r.json();
+  if(!r.ok)throw Error(d.detail||'Optimizer failed');
+  const t=d.train,v=d.validation,u=d.unseen_test,b=d.baseline_unseen_test;
+  const verdict=d.approved_for_live_candidate?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';
+  st.innerHTML=`Tested <b>${d.total_samples}</b> historical samples. ${verdict}`;
+  const row=(l,a,c,e)=>`<div class="wf-row"><span>${l}</span><b>${a}</b><b>${c}</b><b>${e}</b></div>`;
+  const rules=Object.entries(d.selected_rule).map(([k,x])=>`<li>${k.replaceAll('_',' ')}: <b>${x}</b></li>`).join('');
+  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v0.9 WALK-FORWARD</b><span>Train → Validation → Unseen Test</span></div>
+   <div class="wf-head"><span>Metric</span><b>Train</b><b>Validation</b><b>Unseen</b></div>
+   ${row('Samples',t.samples,v.samples,u.samples)}${row('Positive after 1M',t.positive_rate+'%',v.positive_rate+'%',u.positive_rate+'%')}
+   ${row('Beat NIFTY',t.beat_nifty_rate+'%',v.beat_nifty_rate+'%',u.beat_nifty_rate+'%')}
+   ${row('Average return',t.avg_return+'%',v.avg_return+'%',u.avg_return+'%')}
+   ${row('Excess vs NIFTY',t.avg_excess+'%',v.avg_excess+'%',u.avg_excess+'%')}
+   <div class="baseline-box"><b>UNSEEN comparison</b><div>v0.9 excess <strong>${u.avg_excess}%</strong></div><div>v0.7 excess <strong>${b.avg_excess}%</strong></div><div>v0.9 beat NIFTY <strong>${u.beat_nifty_rate}%</strong></div><div>v0.7 beat NIFTY <strong>${b.beat_nifty_rate}%</strong></div></div>
+   <div class="caveat"><b>Selected rules</b><ul>${rules}</ul></div>
+   <div class="caveat important"><b>Decision</b><p>PASS requires positive unseen excess return, >50% NIFTY-beating rate, enough unseen samples and improvement over baseline.</p></div></article>`;
+ }catch(e){st.textContent='Walk-forward optimizer failed: '+e.message}
+}
+
+updatePriceText();
+backtestEngineChanged();
+</script>
+</body>
+</html>
