@@ -1,71 +1,28 @@
-# StockLens AI v0.7 — Accuracy & Backtesting
+# StockLens AI v0.8 — Strategy Research Lab
 
-This version keeps:
-- 1-Month Investing
-- Intraday Trading
-- Intraday-only stock price filter
+Keeps all v0.7 features and adds an experimental Strategy Lab.
 
-And adds a new:
-- Accuracy & Backtest tab
+Intraday candidate filters:
+- no entries before 09:45 or after 14:15
+- model score >= 80
+- relative volume >= 1.15
+- slower trend alignment
+- minimum distance from VWAP
 
-## Intraday backtest
-The intraday backtest uses the SAME signal rules as the live intraday scanner:
-- 5-minute bars
-- VWAP (now reset each trading session)
-- EMA 9 / EMA 20
-- RSI
-- relative volume
-- 20-bar breakout / breakdown
-- Target 1 = +1.5R
-- Stop = -1R
-- default maximum hold = 12 x 5-minute bars (~60 minutes)
-- first valid signal per stock per day
-- same-bar stop + target ambiguity is counted as a stop conservatively
+1-month technical candidate:
+- technical score >= 85
+- Close > EMA50 > EMA200
+- positive 1-month momentum
+- positive 3-month momentum
+- RSI 50–70
 
-Metrics:
-- signals tested
-- Target 1 hit rate
-- positive outcome rate
-- expectancy in R
-- average winner / loser
-- profit factor
-- max drawdown in R
-- BUY vs SELL breakdown
-- confidence/model-score breakdown
-- stock-price breakdown
-- time-of-day breakdown
+The Strategy Lab compares v0.7 baseline vs v0.8 candidate for:
+Intraday: signals, T1 hit rate, positive rate, expectancy, profit factor, drawdown.
+1-month proxy: samples, positive rate, beat-NIFTY rate, average return, excess return.
 
-## 1-Month backtest
-The app also includes a historical 1-month TECHNICAL PROXY:
-- 21 trading-day forward returns
-- technical score threshold
-- positive-after-1-month rate
-- beat-NIFTY rate
-- average stock return
-- average NIFTY return
-- average excess return
+IMPORTANT: v0.8 does NOT automatically replace the live rules with whichever historical test looks best. That would invite overfitting. Candidate rules should be promoted only after separate out-of-sample validation.
 
-IMPORTANT:
-This is deliberately labelled a technical proxy, not full StockLens accuracy.
-A true historical test of the complete 1-month model needs point-in-time historical
-fundamentals, valuation and shareholding data. Free Yahoo data does not reliably
-provide those historical snapshots.
+New file: api/strategy_lab.py
+Changed: api/index.py, index.html, static/style.css
 
-## Deployment
-Replace the files in your existing GitHub repository and commit to `main`.
-Vercel should redeploy automatically.
-
-New file:
-- `api/backtest.py`
-
-Main changed files:
-- `api/index.py`
-- `api/intraday.py`
-- `index.html`
-- `static/style.css`
-
-## Backtest limitations
-Historical results do not guarantee future performance.
-Intraday tests currently exclude brokerage, taxes, slippage and bid/ask spread.
-Yahoo data can contain gaps/revisions.
-Using current NIFTY 50 constituents creates survivorship bias.
+Replace project files in GitHub and commit to main for Vercel redeploy.

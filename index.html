@@ -20,6 +20,7 @@
     <button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button>
     <button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button>
     <button class="tab" onclick="mode('backtest',this)">📊 Accuracy & Backtest</button>
+    <button class="tab" onclick="mode('lab',this)">🧪 Strategy Lab</button>
   </div>
 
   <section class="hero">
@@ -131,6 +132,22 @@
     <button onclick="runBacktest()">Run Backtest</button>
   </section>
 
+  <section id="labControls" class="controls hide">
+    <div>
+      <small>Strategy to improve</small>
+      <select id="labEngine">
+        <option value="intraday" selected>Intraday</option>
+        <option value="monthly">1-Month technical proxy</option>
+      </select>
+    </div>
+    <div>
+      <small>Representative stocks</small>
+      <select id="labLimit"><option value="3">3 — Fast</option><option value="5" selected>5 — Better sample</option></select>
+    </div>
+    <div><small>Comparison</small><div class="money">v0.7 baseline → v0.8 candidate</div></div>
+    <button onclick="runLab()">Compare Strategies</button>
+  </section>
+
   <div id="status" class="status">
     Choose your settings and start a scan.
   </div>
@@ -173,7 +190,60 @@ function priceChanged(which){
     if(which==='min') maxEl.value=lo;
     else minEl.value=hi;
   }
-  updatePriceText();
+  
+function compareMetric(label,oldv,newv,suffix=''){
+  const oldN=Number(oldv), newN=Number(newv);
+  const better=(label.includes('Drawdown')) ? newN<oldN : newN>oldN;
+  return `<div class="compare-row"><span>${label}</span><b>${oldv}${suffix}</b><b class="${better?'better':'worse'}">${newv}${suffix}</b></div>`;
+}
+
+async function runLab(){
+  const engine=document.getElementById('labEngine').value;
+  const limit=document.getElementById('labLimit').value;
+  const st=document.getElementById('status'), cards=document.getElementById('cards');
+  st.innerHTML='<b>Testing baseline against v0.8 candidate…</b>';
+  cards.innerHTML='';
+  try{
+    const url=engine==='intraday'
+      ?`/api/research/intraday-compare?limit_universe=${limit}&period=1mo`
+      :`/api/research/monthly-compare?limit_universe=${limit}&period=2y`;
+    const r=await fetch(url),d=await r.json();
+    if(!r.ok) throw Error(d.detail||'Comparison failed');
+    const o=d.comparison.old,n=d.comparison.candidate;
+    document.getElementById('updated').textContent='Compared '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    if(engine==='intraday'){
+      st.innerHTML=`Baseline <b>${o.signals}</b> signals vs candidate <b>${n.signals}</b>. Judge quality and sample size together.`;
+      cards.innerHTML=`<article class="accuracy-card">
+        <div class="scope good-scope"><b>🧪 EXPERIMENTAL v0.8 FILTERS</b><span>Not yet adopted as the live engine</span></div>
+        <div class="compare-head"><span>Metric</span><b>v0.7</b><b>v0.8 candidate</b></div>
+        ${compareMetric('Signals',o.signals,n.signals)}
+        ${compareMetric('T1 hit rate',o.t1_rate,n.t1_rate,'%')}
+        ${compareMetric('Positive rate',o.positive_rate,n.positive_rate,'%')}
+        ${compareMetric('Expectancy',o.avg_r,n.avg_r,'R')}
+        ${compareMetric('Profit factor',o.profit_factor,n.profit_factor)}
+        ${compareMetric('Max Drawdown',o.max_drawdown_r,n.max_drawdown_r,'R')}
+        <div class="caveat"><b>Candidate filters</b><ul>${d.comparison.candidate_rules.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        <div class="caveat important"><b>Validation rule</b><p>${d.warning} We should only promote these rules after they also improve on a separate unseen period.</p></div>
+      </article>`;
+    }else{
+      st.innerHTML=`Baseline <b>${o.samples}</b> samples vs candidate <b>${n.samples}</b>. This remains a technical proxy.`;
+      cards.innerHTML=`<article class="accuracy-card">
+        <div class="scope proxy-scope"><b>🧪 1-MONTH CANDIDATE FILTER</b><span>Technical proxy only</span></div>
+        <div class="compare-head"><span>Metric</span><b>v0.7</b><b>v0.8 candidate</b></div>
+        ${compareMetric('Samples',o.samples,n.samples)}
+        ${compareMetric('Positive after 1M',o.positive_rate,n.positive_rate,'%')}
+        ${compareMetric('Beat NIFTY',o.beat_nifty_rate,n.beat_nifty_rate,'%')}
+        ${compareMetric('Average return',o.avg_return,n.avg_return,'%')}
+        ${compareMetric('Average excess',o.avg_excess,n.avg_excess,'%')}
+        <div class="caveat"><b>Candidate filters</b><ul>${d.comparison.candidate_rules.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        <div class="caveat important"><b>Important</b><p>${d.warning}</p></div>
+      </article>`;
+    }
+  }catch(e){st.textContent='Comparison failed: '+e.message}
+}
+
+
+updatePriceText();
 }
 
 function preset(lo,hi){
@@ -203,12 +273,24 @@ function mode(m,b){
 
   const day=m==='day';
   const backtest=m==='backtest';
+  const lab=m==='lab';
 
-  document.getElementById('mainControls').classList.toggle('hide',backtest);
+  document.getElementById('mainControls').classList.toggle('hide',backtest || lab);
   document.getElementById('backtestControls').classList.toggle('hide',!backtest);
-  document.getElementById('riskbox').classList.toggle('hide',day || backtest);
+  document.getElementById('labControls').classList.toggle('hide',!lab);
+  document.getElementById('riskbox').classList.toggle('hide',day || backtest || lab);
   document.getElementById('riskpct').classList.toggle('hide',!day);
   document.getElementById('pricePanel').classList.toggle('hide',!day);
+
+  if(lab){
+    document.getElementById('eyebrow').textContent='STRATEGY RESEARCH LAB';
+    document.getElementById('headline').textContent='Compare v0.7 with stricter v0.8 candidate rules.';
+    document.getElementById('copy').textContent='The lab tests whether stronger filters improve expectancy and NIFTY-relative performance. Fewer trades can be better if their quality improves.';
+    document.getElementById('listlabel').textContent='OLD VS NEW';
+    document.getElementById('listtitle').textContent='Strategy Comparison';
+    document.getElementById('status').innerHTML='Run a comparison. A candidate is <b>not adopted automatically</b> just because it looks better in one historical sample.';
+    return;
+  }
 
   if(backtest){
     document.getElementById('eyebrow').textContent='MEASURED HISTORICAL PERFORMANCE';
