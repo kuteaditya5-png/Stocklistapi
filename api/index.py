@@ -14,7 +14,7 @@ if str(API_DIR) not in sys.path:
 from scanner import analyse_stock
 from universe import NIFTY_50
 
-app = FastAPI(title="StockLens AI", version="0.4.0")
+app = FastAPI(title="StockLens AI", version="0.5.0")
 STATIC = ROOT/"static"
 if STATIC.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
@@ -25,7 +25,7 @@ def home():
 
 @app.get("/api/health")
 def health():
-    return {"status":"ok","version":"0.4.0"}
+    return {"status":"ok","version":"0.5.0"}
 
 def scan(limit):
     syms=NIFTY_50[:limit]
@@ -43,6 +43,24 @@ def scan(limit):
 def ranking(top:int=Query(3,ge=1,le=5), limit_universe:int=Query(10,ge=3,le=20)):
     rows,errors=scan(limit_universe)
     return {"scanned":len(rows),"failed":len(errors),"top":rows[:top],"errors":errors[:5]}
+
+
+@app.get("/api/intraday")
+def intraday(capital:float=Query(50000,gt=0), risk_pct:float=Query(1.0,gt=0,le=3), limit_universe:int=Query(10,ge=3,le=20)):
+    from intraday import analyse_intraday
+    syms=NIFTY_50[:limit_universe]
+    rows=[]; errors=[]
+    with ThreadPoolExecutor(max_workers=min(5,len(syms))) as ex:
+        fs={ex.submit(analyse_intraday,s,capital,risk_pct):s for s in syms}
+        for f in as_completed(fs):
+            sym=fs[f]
+            try: rows.append(f.result())
+            except Exception as e: errors.append({"symbol":sym,"error":str(e)})
+    order={"BUY":2,"SELL":2,"NO TRADE":0}
+    rows.sort(key=lambda x:(order.get(x["signal"],0),x["confidence"]),reverse=True)
+    tradeable=[x for x in rows if x["signal"]!="NO TRADE"]
+    return {"mode":"intraday","scanned":len(rows),"top":tradeable[:3],"no_trade_count":len(rows)-len(tradeable),"errors":errors[:5],
+            "disclaimer":"Intraday signals are model outputs, not guaranteed outcomes or investment advice."}
 
 @app.get("/api/portfolio")
 def portfolio(amount:float=Query(...,gt=0), risk:str=Query("moderate"), limit_universe:int=Query(10,ge=3,le=20)):
