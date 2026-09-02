@@ -145,7 +145,7 @@
       <select id="labLimit"><option value="3">3 — Fast</option><option value="5" selected>5 — Better sample</option></select>
     </div>
     <div><small>Comparison</small><div class="money">v0.7 baseline → v0.8 candidate</div></div>
-    <button onclick="runLab()">Compare Strategies</button>
+    <button onclick="runLab()">Compare Strategies</button><button class="optimizer-btn" onclick="runOptimizer()">Run v0.9 Walk-Forward</button>
   </section>
 
   <div id="status" class="status">
@@ -232,8 +232,8 @@ function mode(m,b){
 
   if(lab){
     document.getElementById('eyebrow').textContent='STRATEGY RESEARCH LAB';
-    document.getElementById('headline').textContent='Compare v0.7 with stricter v0.8 candidate rules.';
-    document.getElementById('copy').textContent='The lab tests whether stronger filters improve expectancy and NIFTY-relative performance. Fewer trades can be better if their quality improves.';
+    document.getElementById('headline').textContent='Research strategies with walk-forward validation.';
+    document.getElementById('copy').textContent='The v0.9 optimizer separates training, validation and unseen test periods so we can reject strategies that only look good on the data used to build them.';
     document.getElementById('listlabel').textContent='OLD VS NEW';
     document.getElementById('listtitle').textContent='Strategy Comparison';
     document.getElementById('status').innerHTML='Run a comparison. A candidate is <b>not adopted automatically</b> just because it looks better in one historical sample.';
@@ -587,6 +587,30 @@ async function runLab(){
       </article>`;
     }
   }catch(e){st.textContent='Comparison failed: '+e.message}
+}
+
+
+async function runOptimizer(){
+ const limit=Math.max(5,+document.getElementById('labLimit').value),st=document.getElementById('status'),cards=document.getElementById('cards');
+ st.innerHTML='<b>Running walk-forward optimizer…</b> This uses several years of historical data.';cards.innerHTML='';
+ try{
+  const r=await fetch(`/api/research/walk-forward?limit_universe=${limit}&period=5y`),d=await r.json();
+  if(!r.ok)throw Error(d.detail||'Optimizer failed');
+  const t=d.train,v=d.validation,u=d.unseen_test,b=d.baseline_unseen_test;
+  const verdict=d.approved_for_live_candidate?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';
+  st.innerHTML=`Tested <b>${d.total_samples}</b> historical samples. ${verdict}`;
+  const row=(l,a,c,e)=>`<div class="wf-row"><span>${l}</span><b>${a}</b><b>${c}</b><b>${e}</b></div>`;
+  const rules=Object.entries(d.selected_rule).map(([k,x])=>`<li>${k.replaceAll('_',' ')}: <b>${x}</b></li>`).join('');
+  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v0.9 WALK-FORWARD</b><span>Train → Validation → Unseen Test</span></div>
+   <div class="wf-head"><span>Metric</span><b>Train</b><b>Validation</b><b>Unseen</b></div>
+   ${row('Samples',t.samples,v.samples,u.samples)}${row('Positive after 1M',t.positive_rate+'%',v.positive_rate+'%',u.positive_rate+'%')}
+   ${row('Beat NIFTY',t.beat_nifty_rate+'%',v.beat_nifty_rate+'%',u.beat_nifty_rate+'%')}
+   ${row('Average return',t.avg_return+'%',v.avg_return+'%',u.avg_return+'%')}
+   ${row('Excess vs NIFTY',t.avg_excess+'%',v.avg_excess+'%',u.avg_excess+'%')}
+   <div class="baseline-box"><b>UNSEEN comparison</b><div>v0.9 excess <strong>${u.avg_excess}%</strong></div><div>v0.7 excess <strong>${b.avg_excess}%</strong></div><div>v0.9 beat NIFTY <strong>${u.beat_nifty_rate}%</strong></div><div>v0.7 beat NIFTY <strong>${b.beat_nifty_rate}%</strong></div></div>
+   <div class="caveat"><b>Selected rules</b><ul>${rules}</ul></div>
+   <div class="caveat important"><b>Decision</b><p>PASS requires positive unseen excess return, >50% NIFTY-beating rate, enough unseen samples and improvement over baseline.</p></div></article>`;
+ }catch(e){st.textContent='Walk-forward optimizer failed: '+e.message}
 }
 
 updatePriceText();
