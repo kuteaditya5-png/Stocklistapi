@@ -1,9 +1,12 @@
-# StockLens AI v0.4
-Vercel-ready 1-month investment finder.
+# StockLens AI v0.5
+Vercel-ready dual-mode build.
 
-Replace the corresponding files in your existing GitHub repository, commit, and Vercel will redeploy automatically.
+Modes:
+- 1-Month Investment Finder
+- Intraday Trading Finder
 
-New endpoint:
-`/api/portfolio?amount=50000&risk=moderate&limit_universe=10`
+Intraday uses 5-minute Yahoo Finance data with VWAP, EMA 9/20, RSI, relative volume, 20-bar breakout/breakdown and ATR-based stop/targets. It includes a NO TRADE gate and risk-based position sizing.
 
-Important: projected 1-month values are scenario estimates, not guaranteed returns.
+Replace the corresponding files in your existing GitHub repository and commit. Vercel should redeploy automatically.
+
+Prototype research model only; backtesting and more reliable real-time market data are required before relying on it for trading.

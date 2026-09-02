@@ -1,41 +1,30 @@
-<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockLens AI — 1 Month Finder</title><link rel="stylesheet" href="/static/style.css"></head>
-<body><header><div><b>StockLens <span>AI</span></b><small>1 Month Investment Finder</small></div><i>● Live scanner</i></header>
-<main>
-<section class="hero"><label>INDIAN EQUITY RESEARCH</label><h1>Find strong 1-month<br>stock candidates.</h1>
-<p>Enter your investment amount. StockLens ranks a small shortlist using quality, momentum and risk signals and estimates a scenario range.</p></section>
-<section class="controls">
-<div><small>Investment amount</small><div class="money">₹ <input id="amount" type="number" value="50000" min="1000"></div></div>
-<div><small>Risk profile</small><select id="risk"><option>low</option><option selected>moderate</option><option>high</option></select></div>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StockLens AI</title><link rel="stylesheet" href="/static/style.css"></head><body>
+<header><div><b>StockLens <span>AI</span></b><small>Analyze. Rank. Trade Smarter.</small></div><i>● Live scanner</i></header>
+<main><div class="tabs"><button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button><button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button></div>
+<section class="hero"><label id="eyebrow">1-MONTH INVESTMENT FINDER</label><h1 id="headline">Find strong 1-month stock candidates.</h1>
+<p id="copy">Enter your capital and StockLens will shortlist a few model-ranked candidates with scenario ranges.</p></section>
+<section class="controls"><div><small>Capital / investment amount</small><div class="money">₹ <input id="amount" type="number" value="50000" min="1000"></div></div>
+<div id="riskbox"><small>Risk profile</small><select id="risk"><option>low</option><option selected>moderate</option><option>high</option></select></div>
+<div id="riskpct" class="hide"><small>Risk per trade</small><select id="rp"><option value=".5">0.5%</option><option value="1" selected>1%</option><option value="1.5">1.5%</option><option value="2">2%</option></select></div>
 <div><small>Stocks to scan</small><select id="limit"><option>5</option><option selected>10</option><option>20</option></select></div>
-<button onclick="findPicks()">Find Best Stocks</button>
-</section>
-<div id="status" class="status">Enter an amount and click <b>Find Best Stocks</b>.</div>
-<section><div class="title"><div><label>1-MONTH SHORTLIST</label><h2>Top 3 Candidates</h2></div><small id="updated"></small></div><div id="cards"></div></section>
-<p class="foot">Scenario ranges are model estimates, not guaranteed returns. StockLens is a research tool, not investment advice.</p>
-</main>
+<button id="go" onclick="run()">Find Best Stocks</button></section>
+<div id="status" class="status">Choose your settings and start a scan.</div><section><div class="title"><div><label id="listlabel">1-MONTH SHORTLIST</label><h2 id="listtitle">Top 3 Candidates</h2></div><small id="updated"></small></div><div id="cards"></div></section>
+<p class="foot">All forecasts/signals are model estimates, not guaranteed returns. Research tool only; not investment advice.</p></main>
 <script>
-const fmt=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
-async function findPicks(){
- const amount=+document.getElementById('amount').value, risk=document.getElementById('risk').value, limit=document.getElementById('limit').value;
- if(!amount||amount<1000){alert('Enter an investment amount of at least ₹1,000');return}
- const st=document.getElementById('status'); st.innerHTML='Scanning market data… this can take a little time.';
- document.getElementById('cards').innerHTML='';
- try{
-  const r=await fetch(`/api/portfolio?amount=${amount}&risk=${risk}&limit_universe=${limit}`);
-  const d=await r.json(); if(!r.ok) throw new Error(d.detail||'Scan failed');
-  st.innerHTML=`Scanned <b>${d.scanned}</b> stocks · Showing the strongest 3 model candidates for a 1-month horizon.`;
-  document.getElementById('updated').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  document.getElementById('cards').innerHTML=d.top.map((x,i)=>{
-   const e=x.one_month_estimate,b=x.score_breakdown||{};
-   return `<article><div class="top"><div><em>#${i+1}</em><h3>${x.symbol.replace('.NS','')}</h3><small>${x.company_name||''}</small></div>
-   <div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100</small></div></div>
-   <div class="forecast"><div><small>Investment</small><b>${fmt(amount)}</b></div><div><small>1-month estimated value</small><b>${fmt(e.estimated_value_low)} – ${fmt(e.estimated_value_high)}</b></div><div><small>Estimated return range</small><b>${e.expected_return_low_pct}% to ${e.expected_return_high_pct}%</b></div><div><small>Downside scenario</small><b>${fmt(e.downside_value)}</b></div></div>
-   <div class="meta"><span>Model confidence ${e.confidence}%</span><span>Risk ${x.risk_level||risk}</span><span>${x.recommendation||'WATCHLIST'}</span></div>
-   <div class="why"><div><b>Why it ranks well</b><ul>${(x.positives||[]).slice(0,4).map(v=>`<li>${v}</li>`).join('')||'<li>Composite score and momentum profile.</li>'}</ul></div>
-   <div><b>Warnings</b><ul>${(x.red_flags||[]).slice(0,3).map(v=>`<li>${v}</li>`).join('')||'<li>No major model warning.</li>'}</ul></div></div></article>`
-  }).join('');
- }catch(e){st.textContent='Scan failed: '+e.message}
-}
+let current='invest'; const fmt=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
+function mode(m,b){current=m;document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById('cards').innerHTML='';
+ const day=m==='day';document.getElementById('riskbox').classList.toggle('hide',day);document.getElementById('riskpct').classList.toggle('hide',!day);
+ document.getElementById('eyebrow').textContent=day?'LIVE INTRADAY FINDER':'1-MONTH INVESTMENT FINDER';document.getElementById('headline').textContent=day?'Find high-quality intraday setups.':'Find strong 1-month stock candidates.';
+ document.getElementById('copy').textContent=day?'Scan liquid stocks for BUY, SELL or NO TRADE using VWAP, EMA, RSI, volume and breakouts.':'Enter your capital and StockLens will shortlist a few model-ranked candidates with scenario ranges.';
+ document.getElementById('go').textContent=day?'Scan Intraday Setups':'Find Best Stocks';document.getElementById('listlabel').textContent=day?'INTRADAY SHORTLIST':'1-MONTH SHORTLIST';document.getElementById('listtitle').textContent=day?'Top Trade Setups':'Top 3 Candidates';}
+async function run(){const a=+document.getElementById('amount').value,l=document.getElementById('limit').value,st=document.getElementById('status');if(a<1000){alert('Enter at least ₹1,000');return}
+ st.textContent='Scanning market data…';document.getElementById('cards').innerHTML='';
+ try{let url=current==='day'?`/api/intraday?capital=${a}&risk_pct=${document.getElementById('rp').value}&limit_universe=${l}`:`/api/portfolio?amount=${a}&risk=${document.getElementById('risk').value}&limit_universe=${l}`;
+ const r=await fetch(url),d=await r.json();if(!r.ok)throw Error(d.detail||'Scan failed');document.getElementById('updated').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+ if(current==='day'){st.innerHTML=`Scanned <b>${d.scanned}</b> stocks · ${d.top.length} trade setup(s) · ${d.no_trade_count} rejected as NO TRADE.`;
+ document.getElementById('cards').innerHTML=d.top.length?d.top.map((x,i)=>`<article><div class="top"><div><em>#${i+1}</em><h3>${x.symbol}</h3><small>Signal time ${new Date(x.signal_time).toLocaleTimeString()}</small></div><div class="score">${x.signal}<small>${x.confidence}% confidence</small></div></div>
+ <div class="forecast"><div><small>Entry</small><b>₹${x.entry}</b></div><div><small>Stop Loss</small><b>₹${x.stop_loss}</b></div><div><small>Target 1</small><b>₹${x.target1}</b></div><div><small>Target 2</small><b>₹${x.target2}</b></div></div><div class="meta"><span>Suggested qty ${x.quantity}</span><span>Capital ${fmt(x.capital)}</span><span>Risk ${x.risk_pct}%</span></div><div class="why"><div><b>Signal reasons</b><ul>${x.reasons.map(v=>`<li>${v}</li>`).join('')}</ul></div><div><b>Risk rule</b><ul><li>Exit if stop-loss is hit.</li><li>Do not treat confidence as probability of profit.</li></ul></div></div></article>`).join(''):`<div class="status"><b>NO TRADE</b> — no scanned stock met the minimum setup quality right now.</div>`}
+ else{st.innerHTML=`Scanned <b>${d.scanned}</b> stocks · Showing the strongest 3 model candidates.`;document.getElementById('cards').innerHTML=d.top.map((x,i)=>{let e=x.one_month_estimate;return `<article><div class="top"><div><em>#${i+1}</em><h3>${x.symbol}</h3><small>${x.company_name||''}</small></div><div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100</small></div></div><div class="forecast"><div><small>Investment</small><b>${fmt(a)}</b></div><div><small>Estimated 1-month value</small><b>${fmt(e.estimated_value_low)} – ${fmt(e.estimated_value_high)}</b></div><div><small>Return range</small><b>${e.expected_return_low_pct}% to ${e.expected_return_high_pct}%</b></div><div><small>Downside scenario</small><b>${fmt(e.downside_value)}</b></div></div><div class="meta"><span>Confidence ${e.confidence}%</span><span>${x.recommendation}</span></div></article>`}).join('')}
+ }catch(e){st.textContent='Scan failed: '+e.message}}
 </script></body></html>
