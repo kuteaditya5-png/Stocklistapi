@@ -12,13 +12,14 @@
     <b>StockLens <span>AI</span></b>
     <small>Analyze. Rank. Trade Smarter.</small>
   </div>
-  <i>● Live scanner</i>
+  <i>● Data-driven research</i>
 </header>
 
 <main>
   <div class="tabs">
     <button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button>
     <button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button>
+    <button class="tab" onclick="mode('backtest',this)">📊 Accuracy & Backtest</button>
   </div>
 
   <section class="hero">
@@ -32,10 +33,10 @@
   <section id="pricePanel" class="price-panel hide">
     <div class="price-head">
       <div>
-        <small>STOCK PRICE FILTER</small>
+        <small>INTRADAY STOCK PRICE FILTER</small>
         <h3 id="priceText">Any affordable price</h3>
       </div>
-      <div class="price-note">Price is a filter — ranking quality still decides the picks.</div>
+      <div class="price-note">This filter applies only to Intraday Trading.</div>
     </div>
 
     <div class="dual-slider">
@@ -57,7 +58,7 @@
     </div>
   </section>
 
-  <section class="controls">
+  <section id="mainControls" class="controls">
     <div>
       <small>Capital / investment amount</small>
       <div class="money">₹ <input id="amount" type="number" value="5000" min="1000"></div>
@@ -83,7 +84,7 @@
     </div>
 
     <div>
-      <small>Matching stocks to analyze</small>
+      <small>Stocks to analyze</small>
       <select id="limit">
         <option>5</option>
         <option selected>10</option>
@@ -92,6 +93,42 @@
     </div>
 
     <button id="go" onclick="run()">Find Best Stocks</button>
+  </section>
+
+  <section id="backtestControls" class="controls backtest-controls hide">
+    <div>
+      <small>Engine to test</small>
+      <select id="btEngine" onchange="backtestEngineChanged()">
+        <option value="intraday" selected>Intraday — same live rules</option>
+        <option value="monthly">1-Month — technical proxy</option>
+      </select>
+    </div>
+
+    <div>
+      <small>Representative stocks</small>
+      <select id="btLimit">
+        <option value="3" selected>3 — Fast</option>
+        <option value="5">5 — Better sample</option>
+      </select>
+    </div>
+
+    <div id="btWindowBox">
+      <small>Historical window</small>
+      <select id="btWindow">
+        <option value="5d">5 trading days</option>
+        <option value="1mo" selected>About 1 month</option>
+      </select>
+    </div>
+
+    <div id="btMonthlyBox" class="hide">
+      <small>1-month history</small>
+      <select id="btMonthlyPeriod">
+        <option value="1y">1 year</option>
+        <option value="2y" selected>2 years</option>
+      </select>
+    </div>
+
+    <button onclick="runBacktest()">Run Backtest</button>
   </section>
 
   <div id="status" class="status">
@@ -110,8 +147,7 @@
   </section>
 
   <p class="foot">
-    All forecasts/signals are model estimates, not guaranteed returns.
-    StockLens is a research tool, not investment advice.
+    Forecasts, signals and historical tests are research outputs, not guaranteed returns or investment advice.
   </p>
 </main>
 
@@ -125,7 +161,7 @@ const fmt=n=>new Intl.NumberFormat(
 
 function effectiveMax(){
   const v=+document.getElementById('maxPrice').value;
-  return v>=5000 ? 0 : v; // 0 to API = no upper cap
+  return v>=5000 ? 0 : v;
 }
 
 function priceChanged(which){
@@ -166,9 +202,23 @@ function mode(m,b){
   document.getElementById('cards').innerHTML='';
 
   const day=m==='day';
-  document.getElementById('riskbox').classList.toggle('hide',day);
+  const backtest=m==='backtest';
+
+  document.getElementById('mainControls').classList.toggle('hide',backtest);
+  document.getElementById('backtestControls').classList.toggle('hide',!backtest);
+  document.getElementById('riskbox').classList.toggle('hide',day || backtest);
   document.getElementById('riskpct').classList.toggle('hide',!day);
   document.getElementById('pricePanel').classList.toggle('hide',!day);
+
+  if(backtest){
+    document.getElementById('eyebrow').textContent='MEASURED HISTORICAL PERFORMANCE';
+    document.getElementById('headline').textContent='Test the model instead of guessing its accuracy.';
+    document.getElementById('copy').textContent='Run historical tests and measure hit rate, expectancy, profit factor and NIFTY-relative performance. Intraday uses the same live rule set; the 1-month test is clearly marked as a technical-only proxy.';
+    document.getElementById('listlabel').textContent='BACKTEST RESULTS';
+    document.getElementById('listtitle').textContent='Model Performance';
+    document.getElementById('status').innerHTML='<b>No accuracy percentage is assumed.</b> Run a backtest to calculate results from historical data.';
+    return;
+  }
 
   document.getElementById('eyebrow').textContent=
     day?'LIVE INTRADAY FINDER':'1-MONTH INVESTMENT FINDER';
@@ -189,6 +239,14 @@ function mode(m,b){
 
   document.getElementById('listtitle').textContent=
     day?'Top Affordable Trade Setups':'Top 3 Candidates';
+
+  document.getElementById('status').textContent='Choose your settings and start a scan.';
+}
+
+function backtestEngineChanged(){
+  const monthly=document.getElementById('btEngine').value==='monthly';
+  document.getElementById('btWindowBox').classList.toggle('hide',monthly);
+  document.getElementById('btMonthlyBox').classList.toggle('hide',!monthly);
 }
 
 async function run(){
@@ -203,7 +261,10 @@ async function run(){
     return;
   }
 
-  st.textContent='Searching the NIFTY 50 for stocks in your price range…';
+  st.textContent=current==='day'
+    ?'Searching the NIFTY 50 for intraday setups inside your price range…'
+    :'Analyzing stocks for the 1-month ranking…';
+
   document.getElementById('cards').innerHTML='';
 
   try{
@@ -237,7 +298,7 @@ async function run(){
               <h3>${x.symbol}</h3>
               <small>Stock price ₹${Number(x.price).toFixed(2)}</small>
             </div>
-            <div class="score">${x.signal}<small>${x.confidence}% confidence</small></div>
+            <div class="score">${x.signal}<small>${x.confidence}% model score</small></div>
           </div>
 
           <div class="forecast">
@@ -269,13 +330,13 @@ async function run(){
               <b>Risk rule</b>
               <ul>
                 <li>Exit if stop-loss is hit.</li>
-                <li>Confidence is not probability of profit.</li>
+                <li>Model score is not probability of profit.</li>
               </ul>
             </div>
           </div>
         </article>
       `).join('')
-      : `<div class="empty"><b>NO TRADE</b><br>No stock in your selected price range produced a strong enough setup. Try a wider price range or scan again later.</div>`;
+      : `<div class="empty"><b>NO TRADE</b><br>No stock in your selected price range produced a strong enough setup.</div>`;
 
     }else{
       st.innerHTML=
@@ -291,9 +352,9 @@ async function run(){
               <div>
                 <em>#${i+1}</em>
                 <h3>${x.symbol}</h3>
-                <small>${x.company_name||''} </small>
+                <small>${x.company_name||''}</small>
               </div>
-              <div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100</small></div>
+              <div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100 model score</small></div>
             </div>
 
             <div class="afford">
@@ -309,7 +370,7 @@ async function run(){
             </div>
 
             <div class="meta">
-              <span>Confidence ${e.confidence}%</span>
+              <span>Model score confidence ${e.confidence}%</span>
               <span>${x.recommendation}</span>
               <span>Risk ${x.risk_level||'—'}</span>
             </div>
@@ -326,7 +387,7 @@ async function run(){
             </div>
           </article>`;
         }).join('')
-      : `<div class="empty"><b>No affordable matching stock found.</b><br>Increase the maximum stock price, increase capital, or widen the scan.</div>`;
+      : `<div class="empty"><b>No candidate found.</b><br>Try scanning a wider universe.</div>`;
     }
 
   }catch(e){
@@ -334,7 +395,120 @@ async function run(){
   }
 }
 
+function metric(label,value,sub=''){
+  return `<div class="metric"><small>${label}</small><strong>${value}</strong>${sub?`<span>${sub}</span>`:''}</div>`;
+}
+
+function renderBreakdown(title,rows,monthly=false){
+  if(!rows || !rows.length) return '';
+  return `<div class="breakdown-block">
+    <h3>${title}</h3>
+    <div class="table-wrap"><table>
+      <thead><tr>${
+        monthly
+        ?'<th>Group</th><th>Samples</th><th>Positive 1M</th><th>Beat NIFTY</th><th>Avg return</th>'
+        :'<th>Group</th><th>Signals</th><th>T1 hit</th><th>Positive</th><th>Avg R</th>'
+      }</tr></thead>
+      <tbody>${rows.map(r=>monthly
+        ?`<tr><td>${r.group}</td><td>${r.samples}</td><td>${r.positive_after_1m_rate}%</td><td>${r.beat_nifty_rate}%</td><td>${r.avg_return_pct}%</td></tr>`
+        :`<tr><td>${r.group}</td><td>${r.signals}</td><td>${r.target1_hit_rate}%</td><td>${r.positive_outcome_rate}%</td><td>${r.avg_r}R</td></tr>`
+      ).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+async function runBacktest(){
+  const engine=document.getElementById('btEngine').value;
+  const limit=document.getElementById('btLimit').value;
+  const st=document.getElementById('status');
+  const cards=document.getElementById('cards');
+
+  st.innerHTML='<b>Running historical backtest…</b> This can take a little longer than a normal scan.';
+  cards.innerHTML='';
+
+  try{
+    let url;
+    if(engine==='intraday'){
+      const period=document.getElementById('btWindow').value;
+      url=`/api/backtest/intraday?limit_universe=${limit}&period=${period}&max_hold_bars=12`;
+    }else{
+      const period=document.getElementById('btMonthlyPeriod').value;
+      url=`/api/backtest/monthly?limit_universe=${limit}&period=${period}&horizon_days=21&min_technical_score=65`;
+    }
+
+    const r=await fetch(url);
+    const d=await r.json();
+    if(!r.ok) throw Error(d.detail||'Backtest failed');
+
+    document.getElementById('updated').textContent=
+      'Tested '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+    if(engine==='intraday'){
+      const m=d.metrics;
+      st.innerHTML=`Measured from <b>${m.signals_tested}</b> historical signal(s) across <b>${d.symbols_tested.join(', ')}</b>. This is historical performance, not a future guarantee.`;
+
+      cards.innerHTML=`
+        <article class="accuracy-card">
+          <div class="scope good-scope"><b>✓ SAME LIVE INTRADAY RULES</b><span>${d.scope}</span></div>
+
+          <div class="metrics-grid">
+            ${metric('Signals tested',m.signals_tested)}
+            ${metric('Target 1 hit rate',m.target1_hit_rate+'%','T1 before expiry')}
+            ${metric('Positive outcome rate',m.positive_outcome_rate+'%')}
+            ${metric('Expectancy',m.avg_r+'R','Average per signal')}
+            ${metric('Profit factor',m.profit_factor)}
+            ${metric('Max drawdown',m.max_drawdown_r+'R')}
+          </div>
+
+          <div class="outcome-strip">
+            <span>🎯 T1 hits <b>${m.target1_hits}</b></span>
+            <span>🛑 Stops <b>${m.stop_hits}</b></span>
+            <span>⏱ Timeouts <b>${m.timeouts}</b></span>
+            <span>Avg winner <b>${m.avg_winner_r}R</b></span>
+            <span>Avg loser <b>${m.avg_loser_r}R</b></span>
+          </div>
+
+          ${renderBreakdown('BUY vs SELL',d.by_signal)}
+          ${renderBreakdown('Performance by model score',d.by_confidence)}
+          ${renderBreakdown('Performance by stock price',d.by_price)}
+          ${renderBreakdown('Performance by time of day',d.by_time)}
+
+          <div class="caveat"><b>Backtest limitations</b><ul>${d.limitations.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        </article>`;
+
+    }else{
+      const m=d.metrics;
+      st.innerHTML=`Measured from <b>${m.samples_tested}</b> non-overlapping historical sample(s) across <b>${d.symbols_tested.join(', ')}</b>.`;
+
+      cards.innerHTML=`
+        <article class="accuracy-card">
+          <div class="scope proxy-scope">
+            <b>⚠ 1-MONTH TECHNICAL PROXY</b>
+            <span>${d.scope}</span>
+          </div>
+
+          <div class="metrics-grid">
+            ${metric('Samples tested',m.samples_tested)}
+            ${metric('Positive after ~1M',m.positive_after_1m_rate+'%')}
+            ${metric('Beat NIFTY',m.beat_nifty_rate+'%')}
+            ${metric('Average stock return',m.avg_stock_return_pct+'%')}
+            ${metric('NIFTY average',m.avg_nifty_return_pct+'%')}
+            ${metric('Average excess return',m.avg_excess_return_pct+'%')}
+          </div>
+
+          ${renderBreakdown('Performance by technical score',d.by_score,true)}
+
+          <div class="caveat important"><b>Why this is not full-model accuracy</b><ul>${d.limitations.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+        </article>`;
+    }
+
+  }catch(e){
+    st.textContent='Backtest failed: '+e.message;
+  }
+}
+
 updatePriceText();
+backtestEngineChanged();
 </script>
 </body>
 </html>
