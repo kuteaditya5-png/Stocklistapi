@@ -23,14 +23,13 @@
 
   <section class="hero">
     <label id="eyebrow">1-MONTH INVESTMENT FINDER</label>
-    <h1 id="headline">Find strong stocks that fit your budget.</h1>
+    <h1 id="headline">Find strong 1-month stock candidates.</h1>
     <p id="copy">
-      Enter your capital and choose the stock-price range you prefer.
-      StockLens searches the NIFTY 50 and ranks only matching candidates.
+      Enter your investment amount and StockLens will rank the strongest 1-month candidates.
     </p>
   </section>
 
-  <section class="price-panel">
+  <section id="pricePanel" class="price-panel hide">
     <div class="price-head">
       <div>
         <small>STOCK PRICE FILTER</small>
@@ -96,14 +95,14 @@
   </section>
 
   <div id="status" class="status">
-    Example: ₹5,000 capital + maximum stock price ₹500.
+    Choose your settings and start a scan.
   </div>
 
   <section>
     <div class="title">
       <div>
         <label id="listlabel">1-MONTH SHORTLIST</label>
-        <h2 id="listtitle">Top 3 Affordable Candidates</h2>
+        <h2 id="listtitle">Top 3 Candidates</h2>
       </div>
       <small id="updated"></small>
     </div>
@@ -169,17 +168,18 @@ function mode(m,b){
   const day=m==='day';
   document.getElementById('riskbox').classList.toggle('hide',day);
   document.getElementById('riskpct').classList.toggle('hide',!day);
+  document.getElementById('pricePanel').classList.toggle('hide',!day);
 
   document.getElementById('eyebrow').textContent=
     day?'LIVE INTRADAY FINDER':'1-MONTH INVESTMENT FINDER';
 
   document.getElementById('headline').textContent=
-    day?'Find intraday setups inside your price range.':'Find strong stocks that fit your budget.';
+    day?'Find intraday setups inside your price range.':'Find strong 1-month stock candidates.';
 
   document.getElementById('copy').textContent=
     day
     ?'Filter stocks by price, then scan for BUY, SELL or NO TRADE using VWAP, EMA, RSI, volume and breakouts.'
-    :'Choose your stock-price range first. StockLens then ranks only affordable matching candidates.';
+    :'Enter your investment amount and StockLens will rank the strongest candidates for the next month.';
 
   document.getElementById('go').textContent=
     day?'Scan Intraday Setups':'Find Best Stocks';
@@ -188,7 +188,7 @@ function mode(m,b){
     day?'INTRADAY SHORTLIST':'1-MONTH SHORTLIST';
 
   document.getElementById('listtitle').textContent=
-    day?'Top Affordable Trade Setups':'Top 3 Affordable Candidates';
+    day?'Top Affordable Trade Setups':'Top 3 Candidates';
 }
 
 async function run(){
@@ -212,7 +212,7 @@ async function run(){
     if(current==='day'){
       url=`/api/intraday?capital=${amount}&risk_pct=${document.getElementById('rp').value}&limit_universe=${limit}&min_price=${minPrice}&max_price=${maxPrice}`;
     }else{
-      url=`/api/portfolio?amount=${amount}&risk=${document.getElementById('risk').value}&limit_universe=${limit}&min_price=${minPrice}&max_price=${maxPrice}`;
+      url=`/api/portfolio?amount=${amount}&risk=${document.getElementById('risk').value}&limit_universe=${limit}`;
     }
 
     const r=await fetch(url);
@@ -279,9 +279,7 @@ async function run(){
 
     }else{
       st.innerHTML=
-        `Analyzed <b>${d.analysed}</b> matching candidate(s) · `+
-        `<b>${d.matched_price_filter}</b> passed the price filter · `+
-        `showing the strongest affordable picks.`;
+        `Analyzed <b>${d.analysed}</b> stock(s) · showing the strongest 1-month candidates.`;
 
       document.getElementById('cards').innerHTML=d.top.length
       ? d.top.map((x,i)=>{
@@ -293,16 +291,14 @@ async function run(){
               <div>
                 <em>#${i+1}</em>
                 <h3>${x.symbol}</h3>
-                <small>${x.company_name||''} · ₹${Number(a.share_price).toFixed(2)}/share</small>
+                <small>${x.company_name||''} </small>
               </div>
               <div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100</small></div>
             </div>
 
             <div class="afford">
-              <div><small>You can buy</small><b>${a.affordable_qty} shares</b></div>
-              <div><small>Capital used</small><b>${fmt(a.capital_used)}</b></div>
-              <div><small>Cash remaining</small><b>${fmt(a.cash_left)}</b></div>
-              <div><small>Share price</small><b>${fmt(a.share_price)}</b></div>
+              <div><small>Current share price</small><b>${fmt(a.share_price)}</b></div>
+              <div><small>Approx. whole shares</small><b>${a.affordable_qty}</b></div>
             </div>
 
             <div class="forecast">
