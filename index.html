@@ -1,30 +1,344 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockLens AI</title><link rel="stylesheet" href="/static/style.css"></head><body>
-<header><div><b>StockLens <span>AI</span></b><small>Analyze. Rank. Trade Smarter.</small></div><i>● Live scanner</i></header>
-<main><div class="tabs"><button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button><button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button></div>
-<section class="hero"><label id="eyebrow">1-MONTH INVESTMENT FINDER</label><h1 id="headline">Find strong 1-month stock candidates.</h1>
-<p id="copy">Enter your capital and StockLens will shortlist a few model-ranked candidates with scenario ranges.</p></section>
-<section class="controls"><div><small>Capital / investment amount</small><div class="money">₹ <input id="amount" type="number" value="50000" min="1000"></div></div>
-<div id="riskbox"><small>Risk profile</small><select id="risk"><option>low</option><option selected>moderate</option><option>high</option></select></div>
-<div id="riskpct" class="hide"><small>Risk per trade</small><select id="rp"><option value=".5">0.5%</option><option value="1" selected>1%</option><option value="1.5">1.5%</option><option value="2">2%</option></select></div>
-<div><small>Stocks to scan</small><select id="limit"><option>5</option><option selected>10</option><option>20</option></select></div>
-<button id="go" onclick="run()">Find Best Stocks</button></section>
-<div id="status" class="status">Choose your settings and start a scan.</div><section><div class="title"><div><label id="listlabel">1-MONTH SHORTLIST</label><h2 id="listtitle">Top 3 Candidates</h2></div><small id="updated"></small></div><div id="cards"></div></section>
-<p class="foot">All forecasts/signals are model estimates, not guaranteed returns. Research tool only; not investment advice.</p></main>
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StockLens AI</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div>
+    <b>StockLens <span>AI</span></b>
+    <small>Analyze. Rank. Trade Smarter.</small>
+  </div>
+  <i>● Live scanner</i>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button>
+    <button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button>
+  </div>
+
+  <section class="hero">
+    <label id="eyebrow">1-MONTH INVESTMENT FINDER</label>
+    <h1 id="headline">Find strong stocks that fit your budget.</h1>
+    <p id="copy">
+      Enter your capital and choose the stock-price range you prefer.
+      StockLens searches the NIFTY 50 and ranks only matching candidates.
+    </p>
+  </section>
+
+  <section class="price-panel">
+    <div class="price-head">
+      <div>
+        <small>STOCK PRICE FILTER</small>
+        <h3 id="priceText">Any affordable price</h3>
+      </div>
+      <div class="price-note">Price is a filter — ranking quality still decides the picks.</div>
+    </div>
+
+    <div class="dual-slider">
+      <input id="minPrice" type="range" min="0" max="5000" step="50" value="0" oninput="priceChanged('min')">
+      <input id="maxPrice" type="range" min="0" max="5000" step="50" value="5000" oninput="priceChanged('max')">
+    </div>
+
+    <div class="range-labels">
+      <span>₹0</span>
+      <span>₹5,000+</span>
+    </div>
+
+    <div class="chips">
+      <button onclick="preset(0,5000)">Any Affordable</button>
+      <button onclick="preset(0,200)">Under ₹200</button>
+      <button onclick="preset(0,500)">Under ₹500</button>
+      <button onclick="preset(500,1000)">₹500–₹1,000</button>
+      <button onclick="preset(1000,2500)">₹1,000–₹2,500</button>
+    </div>
+  </section>
+
+  <section class="controls">
+    <div>
+      <small>Capital / investment amount</small>
+      <div class="money">₹ <input id="amount" type="number" value="5000" min="1000"></div>
+    </div>
+
+    <div id="riskbox">
+      <small>Risk profile</small>
+      <select id="risk">
+        <option>low</option>
+        <option selected>moderate</option>
+        <option>high</option>
+      </select>
+    </div>
+
+    <div id="riskpct" class="hide">
+      <small>Risk per trade</small>
+      <select id="rp">
+        <option value=".5">0.5%</option>
+        <option value="1" selected>1%</option>
+        <option value="1.5">1.5%</option>
+        <option value="2">2%</option>
+      </select>
+    </div>
+
+    <div>
+      <small>Matching stocks to analyze</small>
+      <select id="limit">
+        <option>5</option>
+        <option selected>10</option>
+        <option>20</option>
+      </select>
+    </div>
+
+    <button id="go" onclick="run()">Find Best Stocks</button>
+  </section>
+
+  <div id="status" class="status">
+    Example: ₹5,000 capital + maximum stock price ₹500.
+  </div>
+
+  <section>
+    <div class="title">
+      <div>
+        <label id="listlabel">1-MONTH SHORTLIST</label>
+        <h2 id="listtitle">Top 3 Affordable Candidates</h2>
+      </div>
+      <small id="updated"></small>
+    </div>
+    <div id="cards"></div>
+  </section>
+
+  <p class="foot">
+    All forecasts/signals are model estimates, not guaranteed returns.
+    StockLens is a research tool, not investment advice.
+  </p>
+</main>
+
 <script>
-let current='invest'; const fmt=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
-function mode(m,b){current=m;document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById('cards').innerHTML='';
- const day=m==='day';document.getElementById('riskbox').classList.toggle('hide',day);document.getElementById('riskpct').classList.toggle('hide',!day);
- document.getElementById('eyebrow').textContent=day?'LIVE INTRADAY FINDER':'1-MONTH INVESTMENT FINDER';document.getElementById('headline').textContent=day?'Find high-quality intraday setups.':'Find strong 1-month stock candidates.';
- document.getElementById('copy').textContent=day?'Scan liquid stocks for BUY, SELL or NO TRADE using VWAP, EMA, RSI, volume and breakouts.':'Enter your capital and StockLens will shortlist a few model-ranked candidates with scenario ranges.';
- document.getElementById('go').textContent=day?'Scan Intraday Setups':'Find Best Stocks';document.getElementById('listlabel').textContent=day?'INTRADAY SHORTLIST':'1-MONTH SHORTLIST';document.getElementById('listtitle').textContent=day?'Top Trade Setups':'Top 3 Candidates';}
-async function run(){const a=+document.getElementById('amount').value,l=document.getElementById('limit').value,st=document.getElementById('status');if(a<1000){alert('Enter at least ₹1,000');return}
- st.textContent='Scanning market data…';document.getElementById('cards').innerHTML='';
- try{let url=current==='day'?`/api/intraday?capital=${a}&risk_pct=${document.getElementById('rp').value}&limit_universe=${l}`:`/api/portfolio?amount=${a}&risk=${document.getElementById('risk').value}&limit_universe=${l}`;
- const r=await fetch(url),d=await r.json();if(!r.ok)throw Error(d.detail||'Scan failed');document.getElementById('updated').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
- if(current==='day'){st.innerHTML=`Scanned <b>${d.scanned}</b> stocks · ${d.top.length} trade setup(s) · ${d.no_trade_count} rejected as NO TRADE.`;
- document.getElementById('cards').innerHTML=d.top.length?d.top.map((x,i)=>`<article><div class="top"><div><em>#${i+1}</em><h3>${x.symbol}</h3><small>Signal time ${new Date(x.signal_time).toLocaleTimeString()}</small></div><div class="score">${x.signal}<small>${x.confidence}% confidence</small></div></div>
- <div class="forecast"><div><small>Entry</small><b>₹${x.entry}</b></div><div><small>Stop Loss</small><b>₹${x.stop_loss}</b></div><div><small>Target 1</small><b>₹${x.target1}</b></div><div><small>Target 2</small><b>₹${x.target2}</b></div></div><div class="meta"><span>Suggested qty ${x.quantity}</span><span>Capital ${fmt(x.capital)}</span><span>Risk ${x.risk_pct}%</span></div><div class="why"><div><b>Signal reasons</b><ul>${x.reasons.map(v=>`<li>${v}</li>`).join('')}</ul></div><div><b>Risk rule</b><ul><li>Exit if stop-loss is hit.</li><li>Do not treat confidence as probability of profit.</li></ul></div></div></article>`).join(''):`<div class="status"><b>NO TRADE</b> — no scanned stock met the minimum setup quality right now.</div>`}
- else{st.innerHTML=`Scanned <b>${d.scanned}</b> stocks · Showing the strongest 3 model candidates.`;document.getElementById('cards').innerHTML=d.top.map((x,i)=>{let e=x.one_month_estimate;return `<article><div class="top"><div><em>#${i+1}</em><h3>${x.symbol}</h3><small>${x.company_name||''}</small></div><div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100</small></div></div><div class="forecast"><div><small>Investment</small><b>${fmt(a)}</b></div><div><small>Estimated 1-month value</small><b>${fmt(e.estimated_value_low)} – ${fmt(e.estimated_value_high)}</b></div><div><small>Return range</small><b>${e.expected_return_low_pct}% to ${e.expected_return_high_pct}%</b></div><div><small>Downside scenario</small><b>${fmt(e.downside_value)}</b></div></div><div class="meta"><span>Confidence ${e.confidence}%</span><span>${x.recommendation}</span></div></article>`}).join('')}
- }catch(e){st.textContent='Scan failed: '+e.message}}
-</script></body></html>
+let current='invest';
+
+const fmt=n=>new Intl.NumberFormat(
+  'en-IN',
+  {style:'currency',currency:'INR',maximumFractionDigits:0}
+).format(n);
+
+function effectiveMax(){
+  const v=+document.getElementById('maxPrice').value;
+  return v>=5000 ? 0 : v; // 0 to API = no upper cap
+}
+
+function priceChanged(which){
+  const minEl=document.getElementById('minPrice');
+  const maxEl=document.getElementById('maxPrice');
+  let lo=+minEl.value, hi=+maxEl.value;
+
+  if(lo>hi){
+    if(which==='min') maxEl.value=lo;
+    else minEl.value=hi;
+  }
+  updatePriceText();
+}
+
+function preset(lo,hi){
+  document.getElementById('minPrice').value=lo;
+  document.getElementById('maxPrice').value=hi;
+  updatePriceText();
+}
+
+function updatePriceText(){
+  const lo=+document.getElementById('minPrice').value;
+  const hi=+document.getElementById('maxPrice').value;
+  let text='';
+
+  if(lo===0 && hi>=5000) text='Any affordable price';
+  else if(lo===0) text=`Up to ${fmt(hi)}`;
+  else if(hi>=5000) text=`${fmt(lo)} and above`;
+  else text=`${fmt(lo)} – ${fmt(hi)}`;
+
+  document.getElementById('priceText').textContent=text;
+}
+
+function mode(m,b){
+  current=m;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.getElementById('cards').innerHTML='';
+
+  const day=m==='day';
+  document.getElementById('riskbox').classList.toggle('hide',day);
+  document.getElementById('riskpct').classList.toggle('hide',!day);
+
+  document.getElementById('eyebrow').textContent=
+    day?'LIVE INTRADAY FINDER':'1-MONTH INVESTMENT FINDER';
+
+  document.getElementById('headline').textContent=
+    day?'Find intraday setups inside your price range.':'Find strong stocks that fit your budget.';
+
+  document.getElementById('copy').textContent=
+    day
+    ?'Filter stocks by price, then scan for BUY, SELL or NO TRADE using VWAP, EMA, RSI, volume and breakouts.'
+    :'Choose your stock-price range first. StockLens then ranks only affordable matching candidates.';
+
+  document.getElementById('go').textContent=
+    day?'Scan Intraday Setups':'Find Best Stocks';
+
+  document.getElementById('listlabel').textContent=
+    day?'INTRADAY SHORTLIST':'1-MONTH SHORTLIST';
+
+  document.getElementById('listtitle').textContent=
+    day?'Top Affordable Trade Setups':'Top 3 Affordable Candidates';
+}
+
+async function run(){
+  const amount=+document.getElementById('amount').value;
+  const limit=document.getElementById('limit').value;
+  const minPrice=+document.getElementById('minPrice').value;
+  const maxPrice=effectiveMax();
+  const st=document.getElementById('status');
+
+  if(amount<1000){
+    alert('Enter at least ₹1,000');
+    return;
+  }
+
+  st.textContent='Searching the NIFTY 50 for stocks in your price range…';
+  document.getElementById('cards').innerHTML='';
+
+  try{
+    let url;
+
+    if(current==='day'){
+      url=`/api/intraday?capital=${amount}&risk_pct=${document.getElementById('rp').value}&limit_universe=${limit}&min_price=${minPrice}&max_price=${maxPrice}`;
+    }else{
+      url=`/api/portfolio?amount=${amount}&risk=${document.getElementById('risk').value}&limit_universe=${limit}&min_price=${minPrice}&max_price=${maxPrice}`;
+    }
+
+    const r=await fetch(url);
+    const d=await r.json();
+    if(!r.ok) throw Error(d.detail||'Scan failed');
+
+    document.getElementById('updated').textContent=
+      'Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+    if(current==='day'){
+      st.innerHTML=
+        `Analyzed <b>${d.analysed}</b> matching candidate(s) · `+
+        `<b>${d.matched_price_filter}</b> passed the exact price/affordability check · `+
+        `<b>${d.top.length}</b> trade setup(s).`;
+
+      document.getElementById('cards').innerHTML=d.top.length
+      ? d.top.map((x,i)=>`
+        <article>
+          <div class="top">
+            <div>
+              <em>#${i+1}</em>
+              <h3>${x.symbol}</h3>
+              <small>Stock price ₹${Number(x.price).toFixed(2)}</small>
+            </div>
+            <div class="score">${x.signal}<small>${x.confidence}% confidence</small></div>
+          </div>
+
+          <div class="forecast">
+            <div><small>Entry</small><b>₹${x.entry}</b></div>
+            <div><small>Stop Loss</small><b>₹${x.stop_loss}</b></div>
+            <div><small>Target 1</small><b>₹${x.target1}</b></div>
+            <div><small>Target 2</small><b>₹${x.target2}</b></div>
+          </div>
+
+          <div class="afford">
+            <div><small>Max affordable shares</small><b>${x.max_affordable_qty}</b></div>
+            <div><small>Risk-based quantity</small><b>${x.quantity}</b></div>
+            <div><small>Capital used</small><b>${fmt(x.capital_used)}</b></div>
+            <div><small>Cash left</small><b>${fmt(x.cash_left)}</b></div>
+          </div>
+
+          <div class="meta">
+            <span>Capital ${fmt(x.capital)}</span>
+            <span>Risk ${x.risk_pct}%</span>
+            <span>Signal ${new Date(x.signal_time).toLocaleTimeString()}</span>
+          </div>
+
+          <div class="why">
+            <div>
+              <b>Signal reasons</b>
+              <ul>${x.reasons.map(v=>`<li>${v}</li>`).join('')}</ul>
+            </div>
+            <div>
+              <b>Risk rule</b>
+              <ul>
+                <li>Exit if stop-loss is hit.</li>
+                <li>Confidence is not probability of profit.</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+      `).join('')
+      : `<div class="empty"><b>NO TRADE</b><br>No stock in your selected price range produced a strong enough setup. Try a wider price range or scan again later.</div>`;
+
+    }else{
+      st.innerHTML=
+        `Analyzed <b>${d.analysed}</b> matching candidate(s) · `+
+        `<b>${d.matched_price_filter}</b> passed the price filter · `+
+        `showing the strongest affordable picks.`;
+
+      document.getElementById('cards').innerHTML=d.top.length
+      ? d.top.map((x,i)=>{
+          const e=x.one_month_estimate;
+          const a=x.affordability;
+          return `
+          <article>
+            <div class="top">
+              <div>
+                <em>#${i+1}</em>
+                <h3>${x.symbol}</h3>
+                <small>${x.company_name||''} · ₹${Number(a.share_price).toFixed(2)}/share</small>
+              </div>
+              <div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100</small></div>
+            </div>
+
+            <div class="afford">
+              <div><small>You can buy</small><b>${a.affordable_qty} shares</b></div>
+              <div><small>Capital used</small><b>${fmt(a.capital_used)}</b></div>
+              <div><small>Cash remaining</small><b>${fmt(a.cash_left)}</b></div>
+              <div><small>Share price</small><b>${fmt(a.share_price)}</b></div>
+            </div>
+
+            <div class="forecast">
+              <div><small>Your capital</small><b>${fmt(amount)}</b></div>
+              <div><small>Estimated 1-month value</small><b>${fmt(e.estimated_value_low)} – ${fmt(e.estimated_value_high)}</b></div>
+              <div><small>Estimated return range</small><b>${e.expected_return_low_pct}% to ${e.expected_return_high_pct}%</b></div>
+              <div><small>Downside scenario</small><b>${fmt(e.downside_value)}</b></div>
+            </div>
+
+            <div class="meta">
+              <span>Confidence ${e.confidence}%</span>
+              <span>${x.recommendation}</span>
+              <span>Risk ${x.risk_level||'—'}</span>
+            </div>
+
+            <div class="why">
+              <div>
+                <b>Why it ranks well</b>
+                <ul>${(x.positives||[]).slice(0,4).map(v=>`<li>${v}</li>`).join('')||'<li>Composite model score.</li>'}</ul>
+              </div>
+              <div>
+                <b>Warnings</b>
+                <ul>${(x.red_flags||[]).slice(0,3).map(v=>`<li>${v}</li>`).join('')||'<li>No major model warning.</li>'}</ul>
+              </div>
+            </div>
+          </article>`;
+        }).join('')
+      : `<div class="empty"><b>No affordable matching stock found.</b><br>Increase the maximum stock price, increase capital, or widen the scan.</div>`;
+    }
+
+  }catch(e){
+    st.textContent='Scan failed: '+e.message;
+  }
+}
+
+updatePriceText();
+</script>
+</body>
+</html>
