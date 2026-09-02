@@ -4,36 +4,54 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-import pandas as pd
-import yfinance as yf
 from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 API_DIR = Path(__file__).resolve().parent
 ROOT = API_DIR.parent
+
 if str(API_DIR) not in sys.path:
     sys.path.insert(0, str(API_DIR))
 
-from scanner import analyse_stock
-from universe import NIFTY_50
-
-app = FastAPI(title="StockLens AI", version="0.8.0")
+app = FastAPI(title="StockLens AI", version="0.9.2")
 
 STATIC = ROOT / "static"
 if STATIC.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
+def _universe() -> list[str]:
+    # Lazy import keeps the root page/health route lightweight on Vercel.
+    from universe import NIFTY_50
+    return NIFTY_50
+
+
+def _analyse_stock(symbol: str):
+    from scanner import analyse_stock
+    return analyse_stock(symbol)
+
+
 @app.get("/")
 def home():
-    return FileResponse(ROOT / "index.html", media_type="text/html")
+    """
+    Serverless-safe dashboard.
+    The complete HTML/CSS/JS is embedded in api/dashboard.py so it is always
+    bundled together with the FastAPI function on Vercel.
+    """
+    from dashboard import DASHBOARD_HTML
+    return HTMLResponse(DASHBOARD_HTML, status_code=200)
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.8.0"}
-
+    return {
+        "status": "ok",
+        "version": "0.9.2",
+        "dashboard_mode": "embedded",
+        "dashboard_module": (API_DIR / "dashboard.py").exists(),
+        "static_folder_optional": STATIC.exists(),
+    }
 
 def _within_price(price, min_price: float, max_price: float) -> bool:
     if price is None:
@@ -56,13 +74,12 @@ def _batch_price_prefilter(
     max_price: float,
     max_candidates: int,
 ) -> tuple[list[str], dict[str, float]]:
-    """
-    Search the full NIFTY 50 for the chosen price band using a lightweight
-    batch daily-price call, then perform the heavier StockLens analysis only
-    on matching candidates. If the batch call fails, fall back safely.
-    """
     if min_price <= 0 and max_price <= 0:
         return symbols[:max_candidates], {}
+
+    # Heavy packages are imported only when a market scan actually needs them.
+    import pandas as pd
+    import yfinance as yf
 
     prices: dict[str, float] = {}
 
@@ -80,21 +97,25 @@ def _batch_price_prefilter(
         if raw is not None and not raw.empty:
             if isinstance(raw.columns, pd.MultiIndex):
                 level0 = set(raw.columns.get_level_values(0))
+                level1 = set(raw.columns.get_level_values(1))
+
                 for symbol in symbols:
-                    if symbol not in level0:
-                        continue
                     try:
-                        close = raw[symbol]["Close"].dropna()
+                        if symbol in level0:
+                            close = raw[symbol]["Close"].dropna()
+                        elif symbol in level1:
+                            close = raw.xs(symbol, axis=1, level=1)["Close"].dropna()
+                        else:
+                            continue
+
                         if not close.empty:
                             prices[symbol] = float(close.iloc[-1])
                     except Exception:
                         pass
-            else:
-                # Defensive path for a single-symbol-like response.
-                if "Close" in raw.columns and symbols:
-                    close = raw["Close"].dropna()
-                    if not close.empty:
-                        prices[symbols[0]] = float(close.iloc[-1])
+            elif "Close" in raw.columns and symbols:
+                close = raw["Close"].dropna()
+                if not close.empty:
+                    prices[symbols[0]] = float(close.iloc[-1])
 
         matched = [
             symbol
@@ -109,8 +130,6 @@ def _batch_price_prefilter(
     except Exception:
         pass
 
-    # Fallback: analyze a normal capped slice, with an exact price filter
-    # applied after analysis.
     return symbols[:max_candidates], prices
 
 
@@ -120,7 +139,7 @@ def scan(
     max_price: float = 0,
 ) -> tuple[list[dict], list[dict], int]:
     candidates, _ = _batch_price_prefilter(
-        NIFTY_50,
+        _universe(),
         min_price=min_price,
         max_price=max_price,
         max_candidates=limit,
@@ -130,18 +149,47 @@ def scan(
     errors = []
 
     with ThreadPoolExecutor(max_workers=min(5, len(candidates) or 1)) as ex:
-        fs = {ex.submit(analyse_stock, s): s for s in candidates}
+        fs = {ex.submit(_analyse_stock, s): s for s in candidates}
+
         for f in as_completed(fs):
             symbol = fs[f]
             try:
                 row = f.result()
-                if _within_price(row.get("current_price"), min_price, max_price):
+                if _within_price(
+                    row.get("current_price"),
+                    min_price,
+                    max_price,
+                ):
                     out.append(row)
             except Exception as e:
                 errors.append({"symbol": symbol, "error": str(e)})
 
     out.sort(key=lambda x: x.get("stocklens_score", 0), reverse=True)
     return out, errors, len(candidates)
+
+
+def _representative_universe(limit: int) -> list[str]:
+    universe = _universe()
+    limit = max(1, min(limit, len(universe)))
+
+    if limit >= len(universe):
+        return universe[:]
+
+    positions = [
+        round(i * (len(universe) - 1) / max(1, limit - 1))
+        for i in range(limit)
+    ]
+
+    seen = set()
+    result = []
+
+    for pos in positions:
+        symbol = universe[pos]
+        if symbol not in seen:
+            seen.add(symbol)
+            result.append(symbol)
+
+    return result
 
 
 @app.get("/api/ranking")
@@ -156,6 +204,7 @@ def ranking(
         min_price=min_price,
         max_price=max_price,
     )
+
     return {
         "analysed": analysed,
         "matched": len(rows),
@@ -176,7 +225,7 @@ def intraday(
     from intraday import analyse_intraday
 
     candidates, _ = _batch_price_prefilter(
-        NIFTY_50,
+        _universe(),
         min_price=min_price,
         max_price=max_price,
         max_candidates=limit_universe,
@@ -190,25 +239,29 @@ def intraday(
             ex.submit(analyse_intraday, s, capital, risk_pct): s
             for s in candidates
         }
+
         for f in as_completed(fs):
             symbol = fs[f]
+
             try:
                 row = f.result()
                 price = row.get("price")
 
                 if not _within_price(price, min_price, max_price):
                     continue
+
                 if price is None or float(price) > capital:
-                    # NSE cash-equity prototype assumes at least one whole share
-                    # must fit inside the supplied capital.
                     continue
 
                 price = float(price)
-                max_affordable_qty = int(capital // price)
-                row["max_affordable_qty"] = max_affordable_qty
-                row["capital_used"] = round(row.get("quantity", 0) * price, 2)
+                row["max_affordable_qty"] = int(capital // price)
+                row["capital_used"] = round(
+                    row.get("quantity", 0) * price,
+                    2,
+                )
                 row["cash_left"] = round(
-                    max(0, capital - row["capital_used"]), 2
+                    max(0, capital - row["capital_used"]),
+                    2,
                 )
                 rows.append(row)
 
@@ -216,6 +269,7 @@ def intraday(
                 errors.append({"symbol": symbol, "error": str(e)})
 
     order = {"BUY": 2, "SELL": 2, "NO TRADE": 0}
+
     rows.sort(
         key=lambda x: (
             order.get(x.get("signal"), 0),
@@ -244,26 +298,6 @@ def intraday(
     }
 
 
-
-def _representative_universe(limit: int) -> list[str]:
-    """Stable spread across the NIFTY 50 list instead of only the first names."""
-    limit = max(1, min(limit, len(NIFTY_50)))
-    if limit >= len(NIFTY_50):
-        return NIFTY_50[:]
-    positions = [
-        round(i * (len(NIFTY_50) - 1) / max(1, limit - 1))
-        for i in range(limit)
-    ]
-    seen = set()
-    result = []
-    for pos in positions:
-        symbol = NIFTY_50[pos]
-        if symbol not in seen:
-            seen.add(symbol)
-            result.append(symbol)
-    return result
-
-
 @app.get("/api/backtest/intraday")
 def backtest_intraday(
     limit_universe: int = Query(3, ge=3, le=5),
@@ -272,9 +306,8 @@ def backtest_intraday(
 ):
     from backtest import run_intraday_backtest
 
-    symbols = _representative_universe(limit_universe)
     return run_intraday_backtest(
-        symbols=symbols,
+        symbols=_representative_universe(limit_universe),
         period=period,
         max_hold_bars=max_hold_bars,
     )
@@ -289,14 +322,12 @@ def backtest_monthly(
 ):
     from backtest import run_monthly_technical_backtest
 
-    symbols = _representative_universe(limit_universe)
     return run_monthly_technical_backtest(
-        symbols=symbols,
+        symbols=_representative_universe(limit_universe),
         period=period,
         horizon_days=horizon_days,
         min_technical_score=min_technical_score,
     )
-
 
 
 @app.get("/api/research/intraday-compare")
@@ -305,10 +336,17 @@ def research_intraday_compare(
     period: str = Query("1mo"),
 ):
     from strategy_lab import compare_intraday
+
     return {
-        "engine":"intraday",
-        "comparison":compare_intraday(_representative_universe(limit_universe),period),
-        "warning":"Candidate rules are experimental. Do not treat an in-sample improvement as validation."
+        "engine": "intraday",
+        "comparison": compare_intraday(
+            _representative_universe(limit_universe),
+            period,
+        ),
+        "warning": (
+            "Candidate rules are experimental. "
+            "Do not treat an in-sample improvement as validation."
+        ),
     }
 
 
@@ -318,11 +356,30 @@ def research_monthly_compare(
     period: str = Query("2y"),
 ):
     from strategy_lab import compare_monthly
+
     return {
-        "engine":"monthly",
-        "comparison":compare_monthly(_representative_universe(limit_universe),period),
-        "warning":"This remains a technical proxy and is not full-model validation."
+        "engine": "monthly",
+        "comparison": compare_monthly(
+            _representative_universe(limit_universe),
+            period,
+        ),
+        "warning": (
+            "This remains a technical proxy and is not full-model validation."
+        ),
     }
+
+
+@app.get("/api/research/walk-forward")
+def research_walk_forward(
+    limit_universe: int = Query(10, ge=5, le=20),
+    period: str = Query("5y"),
+):
+    from optimizer import walk_forward_monthly
+
+    return walk_forward_monthly(
+        _representative_universe(limit_universe),
+        period=period if period in {"2y", "5y"} else "5y",
+    )
 
 
 @app.get("/api/portfolio")
@@ -331,25 +388,45 @@ def portfolio(
     risk: str = Query("moderate"),
     limit_universe: int = Query(10, ge=3, le=20),
 ):
-    rows, errors, analysed = scan(limit_universe, min_price=0, max_price=0)
+    rows, errors, analysed = scan(
+        limit_universe,
+        min_price=0,
+        max_price=0,
+    )
+
     risk = risk.lower()
     picks = []
 
     for r in rows:
         current_price = r.get("current_price")
+
         if current_price is None:
             continue
+
         price = float(current_price)
         affordable_qty = int(amount // price)
         score = float(r.get("stocklens_score", 0))
         rb = r.get("score_breakdown", {}) or {}
         tech = float(rb.get("technicals", 50))
-        center = max(-2.0, min(8.0, (score - 55) * 0.22 + (tech - 50) * 0.05))
-        width = {"low": 3.0, "moderate": 4.5, "high": 6.0}.get(risk, 4.5)
-        low, high = center-width, center+width
+
+        center = max(
+            -2.0,
+            min(
+                8.0,
+                (score - 55) * 0.22 + (tech - 50) * 0.05,
+            ),
+        )
+
+        width = {
+            "low": 3.0,
+            "moderate": 4.5,
+            "high": 6.0,
+        }.get(risk, 4.5)
+
+        low = center - width
+        high = center + width
         downside = min(low, -2.0)
 
-        # Keep the original 1-month concept: forecast the entered investment amount.
         picks.append({
             **r,
             "affordability": {
@@ -359,12 +436,25 @@ def portfolio(
             "one_month_estimate": {
                 "expected_return_low_pct": round(low, 1),
                 "expected_return_high_pct": round(high, 1),
-                "estimated_value_low": round(amount*(1+low/100), 2),
-                "estimated_value_high": round(amount*(1+high/100), 2),
-                "downside_value": round(amount*(1+downside/100), 2),
-                "confidence": round(max(40, min(85, score)), 1),
+                "estimated_value_low": round(
+                    amount * (1 + low / 100),
+                    2,
+                ),
+                "estimated_value_high": round(
+                    amount * (1 + high / 100),
+                    2,
+                ),
+                "downside_value": round(
+                    amount * (1 + downside / 100),
+                    2,
+                ),
+                "confidence": round(
+                    max(40, min(85, score)),
+                    1,
+                ),
             },
         })
+
         if len(picks) >= 3:
             break
 
@@ -375,5 +465,8 @@ def portfolio(
         "analysed": analysed,
         "top": picks,
         "failed": len(errors),
-        "disclaimer": "Scenario estimates are model outputs, not guaranteed returns or investment advice.",
+        "disclaimer": (
+            "Scenario estimates are model outputs, not guaranteed returns "
+            "or investment advice."
+        ),
     }
