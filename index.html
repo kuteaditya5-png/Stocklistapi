@@ -145,7 +145,7 @@
       <select id="labLimit"><option value="3">3 — Fast</option><option value="5" selected>5 — Better sample</option></select>
     </div>
     <div><small>Comparison</small><div class="money">v0.7 baseline → v0.8 candidate</div></div>
-    <button onclick="runLab()">Compare Strategies</button><button class="optimizer-btn" onclick="runOptimizer()">Run v0.9 Walk-Forward</button>
+    <button onclick="runLab()">Compare Strategies</button><button class="optimizer-btn" onclick="runOptimizer()">Run v0.9 Walk-Forward</button><button class="optimizer-btn" onclick="runMonthlyRanker()">Run v1.0 Ranking Test</button>
   </section>
 
   <div id="status" class="status">
@@ -612,6 +612,10 @@ async function runOptimizer(){
    <div class="caveat important"><b>Decision</b><p>PASS requires positive unseen excess return, >50% NIFTY-beating rate, enough unseen samples and improvement over baseline.</p></div></article>`;
  }catch(e){st.textContent='Walk-forward optimizer failed: '+e.message}
 }
+
+async function runMonthlyRanker(){
+ const limit=Math.max(5,+document.getElementById('labLimit').value),st=document.getElementById('status'),cards=document.getElementById('cards'); st.innerHTML='<b>Running v1.0 monthly ranking…</b>';cards.innerHTML='';
+ try{const r=await fetch(`/api/research/monthly-ranking?limit_universe=${limit}&top_n=3&period=5y`),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const a=d.research,u=d.unseen,v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';const row=(l,x,y)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b>${y}</b></div>`;st.innerHTML=`Tested <b>${d.total_months}</b> monthly Top-3 portfolios. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.0 MONTHLY RANKING</b><span>Top 3 vs NIFTY</span></div><div class="compare-head"><span>Metric</span><b>Research</b><b>Unseen</b></div>${row('Months',a.months,u.months)}${row('Positive months',a.positive_months+'%',u.positive_months+'%')}${row('Beat NIFTY',a.beat_nifty+'%',u.beat_nifty+'%')}${row('Average return',a.avg_return+'%',u.avg_return+'%')}${row('NIFTY average',a.avg_nifty+'%',u.avg_nifty+'%')}${row('Average excess',a.avg_excess+'%',u.avg_excess+'%')}${row('Max drawdown',a.max_drawdown+'%',u.max_drawdown+'%')}<div class="caveat important"><b>PASS rule</b><p>At least 6 unseen months, positive average excess return and >50% NIFTY-beating months.</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.0 ranking failed: '+e.message}}
 
 updatePriceText();
 backtestEngineChanged();
