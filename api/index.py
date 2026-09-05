@@ -14,7 +14,7 @@ ROOT = API_DIR.parent
 if str(API_DIR) not in sys.path:
     sys.path.insert(0, str(API_DIR))
 
-app = FastAPI(title="StockLens AI", version="0.9.2")
+app = FastAPI(title="StockLens AI", version="1.0.0")
 
 STATIC = ROOT / "static"
 if STATIC.exists():
@@ -47,7 +47,7 @@ def home():
 def health():
     return {
         "status": "ok",
-        "version": "0.9.2",
+        "version": "1.0.0",
         "dashboard_mode": "embedded",
         "dashboard_module": (API_DIR / "dashboard.py").exists(),
         "static_folder_optional": STATIC.exists(),
@@ -380,6 +380,13 @@ def research_walk_forward(
         _representative_universe(limit_universe),
         period=period if period in {"2y", "5y"} else "5y",
     )
+
+
+
+@app.get("/api/research/monthly-ranking")
+def research_monthly_ranking(limit_universe: int = Query(20, ge=5, le=50), top_n: int = Query(3, ge=3, le=5), period: str = Query("5y")):
+    from monthly_ranker import monthly_ranking_backtest
+    return monthly_ranking_backtest(_representative_universe(limit_universe), period=period if period in {"2y","5y"} else "5y", top_n=top_n)
 
 
 @app.get("/api/portfolio")
