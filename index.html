@@ -150,6 +150,8 @@
     <button class="optimizer-btn" onclick="runMonthlyRanker()">Run v1.1 Ranking Test</button>
     <div><small>v1.2 Frozen model</small><div class="money">20 stocks → Top 3 → rolling validation</div></div>
     <button class="optimizer-btn" onclick="runRollingValidation()">Run v1.2 Rolling Validation</button>
+    <div><small>v1.3 Regime diagnostics</small><div class="money">Frozen v1.2 model → Bullish / Sideways / Bearish + volatility</div></div>
+    <button class="optimizer-btn" onclick="runRegimeValidation()">Run v1.3 Market Regime Test</button>
   </section>
 
   <div id="status" class="status">
@@ -625,6 +627,12 @@ async function runMonthlyRanker(){
 async function runRollingValidation(){
  const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.2 rolling validation with frozen 20-stock Top-3 logic…</b>';cards.innerHTML='';
  try{const r=await fetch('/api/research/rolling-validation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const e=d.evaluation,v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';const metric=(l,x)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b></b></div>`;const blocks=d.blocks.map(b=>`<div class="compare-row"><span>Block ${b.block} · ${b.start} → ${b.end}</span><b>${b.avg_excess}% excess</b><b>${b.beat_nifty}% beat</b></div>`).join('');st.innerHTML=`Evaluated <b>${e.months}</b> rolling months after an ${d.warmup_months}-month warm-up. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.2 ROLLING VALIDATION</b><span>Frozen 20-stock universe · Top 3</span></div><div class="compare-head"><span>Metric</span><b>Result</b><b></b></div>${metric('Positive months',e.positive_months+'%')}${metric('Beat NIFTY',e.beat_nifty+'%')}${metric('Average monthly return',e.avg_return+'%')}${metric('Average excess',e.avg_excess+'%')}${metric('Max drawdown',e.max_drawdown+'%')}${metric('Cumulative portfolio return',e.cumulative_return+'%')}${metric('NIFTY cumulative return',e.nifty_cumulative+'%')}<div class="caveat"><b>Rolling stability</b>${blocks}</div><div class="caveat important"><b>PASS rule</b><p>At least 18 evaluation months, positive average excess, >50% NIFTY-beating months, and positive/strong NIFTY-beating results in at least 60% of rolling blocks.</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.2 rolling validation failed: '+e.message}
+}
+
+
+async function runRegimeValidation(){
+ const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.3 point-in-time market regime validation…</b>';cards.innerHTML='';
+ try{const r=await fetch('/api/research/regime-validation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REVIEW</span>';const row=x=>`<div class="compare-row"><span>${x.regime}</span><b>${x.months} mo · ${x.positive_months}% positive</b><b>${x.avg_excess}% excess · ${x.beat_nifty}% beat</b></div>`;const weak=d.weak_regimes.length?d.weak_regimes.join(', '):'None among regimes with at least 3 observations';st.innerHTML=`Evaluated <b>${d.evaluation_months}</b> months by market regime. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.3 MARKET REGIME VALIDATION</b><span>${d.frozen_model}</span></div><div class="compare-head"><span>Trend regime</span><b>Sample / positive</b><b>Excess / beat NIFTY</b></div>${d.trend_regimes.map(row).join('')}<div class="caveat"><b>Volatility regimes</b>${d.volatility_regimes.map(row).join('')}</div><div class="caveat"><b>Weak regimes</b><p>${weak}</p></div><div class="caveat important"><b>Point-in-time method</b><p>${d.method}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.3 regime validation failed: '+e.message}
 }
 
 updatePriceText();
