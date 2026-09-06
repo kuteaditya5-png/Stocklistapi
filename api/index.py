@@ -14,7 +14,7 @@ ROOT = API_DIR.parent
 if str(API_DIR) not in sys.path:
     sys.path.insert(0, str(API_DIR))
 
-app = FastAPI(title="StockLens AI", version="1.0.0")
+app = FastAPI(title="StockLens AI", version="1.1.0")
 
 STATIC = ROOT / "static"
 if STATIC.exists():
@@ -47,7 +47,7 @@ def home():
 def health():
     return {
         "status": "ok",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "dashboard_mode": "embedded",
         "dashboard_module": (API_DIR / "dashboard.py").exists(),
         "static_folder_optional": STATIC.exists(),
