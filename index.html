@@ -148,6 +148,8 @@
     <button onclick="runLab()">Compare Strategies</button><button class="optimizer-btn" onclick="runOptimizer()">Run v0.9 Walk-Forward</button>
     <div><small>v1.1 Monthly ranking universe</small><select id="monthlyRankLimit"><option value="10">10 stocks</option><option value="20" selected>20 stocks</option><option value="30">30 stocks</option><option value="50">50 stocks</option></select></div>
     <button class="optimizer-btn" onclick="runMonthlyRanker()">Run v1.1 Ranking Test</button>
+    <div><small>v1.2 Frozen model</small><div class="money">20 stocks → Top 3 → rolling validation</div></div>
+    <button class="optimizer-btn" onclick="runRollingValidation()">Run v1.2 Rolling Validation</button>
   </section>
 
   <div id="status" class="status">
@@ -618,6 +620,12 @@ async function runOptimizer(){
 async function runMonthlyRanker(){
  const limit=+document.getElementById('monthlyRankLimit').value,st=document.getElementById('status'),cards=document.getElementById('cards'); st.innerHTML=`<b>Running v1.1 monthly ranking on ${limit} stocks…</b>`;cards.innerHTML='';
  try{const r=await fetch(`/api/research/monthly-ranking?limit_universe=${limit}&top_n=3&period=5y`),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const a=d.research,u=d.unseen,v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';const row=(l,x,y)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b>${y}</b></div>`;st.innerHTML=`Tested <b>${d.total_months}</b> monthly Top-3 portfolios. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.1 MONTHLY RANKING</b><span>Top 3 vs NIFTY</span></div><div class="compare-head"><span>Metric</span><b>Research</b><b>Unseen</b></div>${row('Months',a.months,u.months)}${row('Positive months',a.positive_months+'%',u.positive_months+'%')}${row('Beat NIFTY',a.beat_nifty+'%',u.beat_nifty+'%')}${row('Average return',a.avg_return+'%',u.avg_return+'%')}${row('NIFTY average',a.avg_nifty+'%',u.avg_nifty+'%')}${row('Average excess',a.avg_excess+'%',u.avg_excess+'%')}${row('Max drawdown',a.max_drawdown+'%',u.max_drawdown+'%')}<div class="caveat important"><b>PASS rule</b><p>At least 6 unseen months, positive average excess return and >50% NIFTY-beating months.</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.1 ranking failed: '+e.message}}
+
+
+async function runRollingValidation(){
+ const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.2 rolling validation with frozen 20-stock Top-3 logic…</b>';cards.innerHTML='';
+ try{const r=await fetch('/api/research/rolling-validation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const e=d.evaluation,v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';const metric=(l,x)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b></b></div>`;const blocks=d.blocks.map(b=>`<div class="compare-row"><span>Block ${b.block} · ${b.start} → ${b.end}</span><b>${b.avg_excess}% excess</b><b>${b.beat_nifty}% beat</b></div>`).join('');st.innerHTML=`Evaluated <b>${e.months}</b> rolling months after an ${d.warmup_months}-month warm-up. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.2 ROLLING VALIDATION</b><span>Frozen 20-stock universe · Top 3</span></div><div class="compare-head"><span>Metric</span><b>Result</b><b></b></div>${metric('Positive months',e.positive_months+'%')}${metric('Beat NIFTY',e.beat_nifty+'%')}${metric('Average monthly return',e.avg_return+'%')}${metric('Average excess',e.avg_excess+'%')}${metric('Max drawdown',e.max_drawdown+'%')}${metric('Cumulative portfolio return',e.cumulative_return+'%')}${metric('NIFTY cumulative return',e.nifty_cumulative+'%')}<div class="caveat"><b>Rolling stability</b>${blocks}</div><div class="caveat important"><b>PASS rule</b><p>At least 18 evaluation months, positive average excess, >50% NIFTY-beating months, and positive/strong NIFTY-beating results in at least 60% of rolling blocks.</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.2 rolling validation failed: '+e.message}
+}
 
 updatePriceText();
 backtestEngineChanged();
