@@ -205,3 +205,71 @@ def _monthly_rows_with_regime(symbols,period="5y",top_n=3):
         p=z.nlargest(top_n,'score').copy(); p['ret']=(p.future/p.price-1)*100; pr=float(p.ret.mean()); nr=float((p.iloc[0].fnifty/p.iloc[0].nifty-1)*100)
         months.append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),"nifty_return":round(nr,2),"excess":round(pr-nr,2),"trend_regime":trend_regime,"vol_regime":vol_regime})
     return months
+
+
+def regime_aware_validation(symbols, period="5y", top_n=3, warmup_months=18, block_months=6):
+    """v1.4 candidate vs the frozen v1.2 score on identical point-in-time months.
+
+    Regime classification uses only NIFTY information available on the ranking date.
+    The v1.2 baseline is untouched. The candidate changes ranking weights only; it
+    remains fully invested in Top-3 stocks so comparisons are like-for-like.
+    """
+    raw=yf.download(symbols+["^NSEI"],period=period,interval="1d",auto_adjust=True,progress=False,threads=True,group_by="ticker")
+    fs={s:_frame(raw,s) for s in symbols+["^NSEI"]}; b=fs["^NSEI"]["Close"].copy(); b.index=pd.DatetimeIndex(b.index).tz_localize(None).normalize()
+    bm=pd.DataFrame({"Close":b}); bm["R63"]=bm.Close.pct_change(63); bm["E200"]=bm.Close.ewm(span=200,adjust=False).mean(); bm["VOL20"]=bm.Close.pct_change().rolling(20).std(); bm["VOL70"]=bm.VOL20.rolling(252,min_periods=126).quantile(.70)
+    prep={}
+    for s in symbols:
+        x=fs[s].copy()
+        if len(x)<300: continue
+        x.index=pd.DatetimeIndex(x.index).tz_localize(None).normalize(); x["NIFTY"]=b.reindex(x.index).ffill()
+        x["R21"]=x.Close.pct_change(21); x["R63"]=x.Close.pct_change(63); x["R126"]=x.Close.pct_change(126); x["RS21"]=x.R21-x.NIFTY.pct_change(21); x["RS63"]=x.R63-x.NIFTY.pct_change(63)
+        x["E50"]=x.Close.ewm(span=50,adjust=False).mean(); x["E200"]=x.Close.ewm(span=200,adjust=False).mean(); x["VOL"]=x.Close.pct_change().rolling(20).std(); x["D52"]=x.Close/x.Close.rolling(252).max()-1; x["VR"]=x.Volume/x.Volume.rolling(20).mean(); prep[s]=x
+    base_rows=[]; cand_rows=[]
+    for dt in list(b.index[260:-22:21]):
+        if dt not in bm.index: continue
+        br=bm.loc[dt]
+        if pd.isna(br.R63) or pd.isna(br.E200) or pd.isna(br.VOL20): continue
+        regime="BULLISH" if br.Close>br.E200 and br.R63>0.03 else ("BEARISH" if br.Close<br.E200 and br.R63<-0.03 else "SIDEWAYS")
+        highvol=bool(pd.notna(br.VOL70) and br.VOL20>br.VOL70)
+        q=[]
+        for s,x in prep.items():
+            h=x.loc[x.index<=dt]
+            if h.empty: continue
+            i=x.index.get_loc(h.index[-1])
+            if not isinstance(i,(int,np.integer)) or i+21>=len(x): continue
+            r=x.iloc[i]; f=x.iloc[i+21]; keys=["R21","R63","R126","RS21","RS63","E50","E200","VOL","D52","VR","NIFTY"]
+            if any(pd.isna(r[k]) for k in keys): continue
+            q.append(dict(symbol=s.replace('.NS',''),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
+        if len(q)<top_n: continue
+        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        prs63=_pct(z.rs63); prs21=_pct(z.rs21); pr63=_pct(z.r63); pr126=_pct(z.r126); pvol=_pct(z.vol,False); pd52=_pct(z.d52); pvr=_pct(z.vr)
+        z['base_score']=.25*prs63+.15*prs21+.15*pr63+.10*pr126+.10*trend+.10*pvol+.10*pd52+.05*pvr
+        # Predefined v1.4 candidate: attack the diagnosed SIDEWAYS weakness with
+        # more relative strength/trend quality; in HIGH VOL emphasize low volatility.
+        if regime=="SIDEWAYS":
+            z['cand_score']=.32*prs63+.18*prs21+.10*pr63+.05*pr126+.15*trend+.08*pvol+.08*pd52+.04*pvr
+        else:
+            z['cand_score']=z['base_score']
+        if highvol:
+            z['cand_score']=.85*z['cand_score']+.15*pvol
+        pb=z.nlargest(top_n,'base_score').copy(); pc=z.nlargest(top_n,'cand_score').copy()
+        pb['ret']=(pb.future/pb.price-1)*100; pc['ret']=(pc.future/pc.price-1)*100; nr=float((pb.iloc[0].fnifty/pb.iloc[0].nifty-1)*100)
+        common={"date":str(pd.Timestamp(dt).date()),"nifty_return":round(nr,2),"trend_regime":regime,"vol_regime":"HIGH VOL" if highvol else "NORMAL VOL"}
+        brw={**common,"portfolio_return":round(float(pb.ret.mean()),2)}; brw["excess"]=round(brw["portfolio_return"]-brw["nifty_return"],2); base_rows.append(brw)
+        crw={**common,"portfolio_return":round(float(pc.ret.mean()),2)}; crw["excess"]=round(crw["portfolio_return"]-crw["nifty_return"],2); cand_rows.append(crw)
+    if len(base_rows)<=warmup_months+6: raise ValueError("Not enough history for v1.4 validation")
+    base=base_rows[warmup_months:]; cand=cand_rows[warmup_months:]; mb=_metrics(base); mc=_metrics(cand)
+    trend=[]
+    for k in ["BULLISH","SIDEWAYS","BEARISH"]:
+        x=[r for r in cand if r["trend_regime"]==k]
+        if x: trend.append({"regime":k,**_metrics(x)})
+    blocks=[]
+    for i in range(0,len(cand),block_months):
+        cb=cand[i:i+block_months]; bb=base[i:i+block_months]
+        if len(cb)<3: continue
+        cm=_metrics(cb); bmtr=_metrics(bb); blocks.append({"block":len(blocks)+1,"candidate_excess":cm["avg_excess"],"baseline_excess":bmtr["avg_excess"]})
+    improved_blocks=sum(1 for x in blocks if x["candidate_excess"]>=x["baseline_excess"])
+    # Conservative promotion: candidate must improve excess and NIFTY hit rate,
+    # not worsen drawdown by >2pp, and improve/not lose in >=60% rolling blocks.
+    passed=(mc["avg_excess"]>mb["avg_excess"] and mc["beat_nifty"]>mb["beat_nifty"] and mc["max_drawdown"]<=mb["max_drawdown"]+2 and len(blocks)>=3 and improved_blocks/len(blocks)>=.6)
+    return {"engine":"v1.4 Regime-Aware Ranking Candidate","evaluation_months":len(cand),"baseline":mb,"candidate":mc,"candidate_regimes":trend,"rolling_blocks":blocks,"improved_blocks":improved_blocks,"verdict":"PASS" if passed else "REJECT","rules":["Bullish/Bearish: preserve frozen v1.2 ranking weights","Sideways: increase relative-strength and trend-quality weight; reduce raw momentum weight","High volatility: blend an additional 15% low-volatility preference","Always hold Top 3 so the comparison with v1.2 stays like-for-like"],"pass_rule":"Candidate must improve average excess AND NIFTY-beating rate, keep drawdown within +2 percentage points of baseline, and equal/beat baseline excess in at least 60% of rolling blocks.","warning":"Experimental historical candidate. The v1.2 model remains the frozen baseline unless v1.4 passes. Current-universe survivorship bias, costs, taxes and slippage are not included."}
