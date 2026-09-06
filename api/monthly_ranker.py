@@ -273,3 +273,80 @@ def regime_aware_validation(symbols, period="5y", top_n=3, warmup_months=18, blo
     # not worsen drawdown by >2pp, and improve/not lose in >=60% rolling blocks.
     passed=(mc["avg_excess"]>mb["avg_excess"] and mc["beat_nifty"]>mb["beat_nifty"] and mc["max_drawdown"]<=mb["max_drawdown"]+2 and len(blocks)>=3 and improved_blocks/len(blocks)>=.6)
     return {"engine":"v1.4 Regime-Aware Ranking Candidate","evaluation_months":len(cand),"baseline":mb,"candidate":mc,"candidate_regimes":trend,"rolling_blocks":blocks,"improved_blocks":improved_blocks,"verdict":"PASS" if passed else "REJECT","rules":["Bullish/Bearish: preserve frozen v1.2 ranking weights","Sideways: increase relative-strength and trend-quality weight; reduce raw momentum weight","High volatility: blend an additional 15% low-volatility preference","Always hold Top 3 so the comparison with v1.2 stays like-for-like"],"pass_rule":"Candidate must improve average excess AND NIFTY-beating rate, keep drawdown within +2 percentage points of baseline, and equal/beat baseline excess in at least 60% of rolling blocks.","warning":"Experimental historical candidate. The v1.2 model remains the frozen baseline unless v1.4 passes. Current-universe survivorship bias, costs, taxes and slippage are not included."}
+
+
+
+def sideways_optimizer_validation(symbols, period="5y", top_n=3, warmup_months=18):
+    """v1.5: compare predefined SIDEWAYS-only ranking candidates.
+    Bullish and bearish months keep the frozen v1.2 score unchanged.
+    """
+    raw=yf.download(symbols+["^NSEI"],period=period,interval="1d",auto_adjust=True,progress=False,threads=True,group_by="ticker")
+    fs={s:_frame(raw,s) for s in symbols+["^NSEI"]}; b=fs["^NSEI"]["Close"].copy(); b.index=pd.DatetimeIndex(b.index).tz_localize(None).normalize()
+    bm=pd.DataFrame({"Close":b}); bm["R63"]=bm.Close.pct_change(63); bm["E200"]=bm.Close.ewm(span=200,adjust=False).mean()
+    prep={}
+    for s in symbols:
+        x=fs[s].copy()
+        if len(x)<300: continue
+        x.index=pd.DatetimeIndex(x.index).tz_localize(None).normalize(); x["NIFTY"]=b.reindex(x.index).ffill()
+        x["R21"]=x.Close.pct_change(21); x["R63"]=x.Close.pct_change(63); x["R126"]=x.Close.pct_change(126)
+        x["RS21"]=x.R21-x.NIFTY.pct_change(21); x["RS63"]=x.R63-x.NIFTY.pct_change(63)
+        x["E50"]=x.Close.ewm(span=50,adjust=False).mean(); x["E200"]=x.Close.ewm(span=200,adjust=False).mean()
+        x["VOL"]=x.Close.pct_change().rolling(20).std(); x["D52"]=x.Close/x.Close.rolling(252).max()-1; x["VR"]=x.Volume/x.Volume.rolling(20).mean(); prep[s]=x
+
+    rows={"BASE":[],"RS":[],"QUALITY":[],"BALANCED":[]}
+    for dt in list(b.index[260:-22:21]):
+        if dt not in bm.index: continue
+        br=bm.loc[dt]
+        if pd.isna(br.R63) or pd.isna(br.E200): continue
+        regime="BULLISH" if br.Close>br.E200 and br.R63>0.03 else ("BEARISH" if br.Close<br.E200 and br.R63<-0.03 else "SIDEWAYS")
+        q=[]
+        for s,x in prep.items():
+            h=x.loc[x.index<=dt]
+            if h.empty: continue
+            i=x.index.get_loc(h.index[-1])
+            if not isinstance(i,(int,np.integer)) or i+21>=len(x): continue
+            r=x.iloc[i]; f=x.iloc[i+21]; keys=["R21","R63","R126","RS21","RS63","E50","E200","VOL","D52","VR","NIFTY"]
+            if any(pd.isna(r[k]) for k in keys): continue
+            q.append(dict(symbol=s.replace(".NS",""),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),
+                rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),
+                vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
+        if len(q)<top_n: continue
+        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        rs63=_pct(z.rs63); rs21=_pct(z.rs21); r63=_pct(z.r63); r126=_pct(z.r126); lowvol=_pct(z.vol,False); d52=_pct(z.d52); vr=_pct(z.vr)
+        base=.25*rs63+.15*rs21+.15*r63+.10*r126+.10*trend+.10*lowvol+.10*d52+.05*vr
+        scores={"BASE":base}
+        if regime=="SIDEWAYS":
+            scores["RS"]=.40*rs63+.25*rs21+.08*r63+.04*r126+.10*trend+.05*lowvol+.05*d52+.03*vr
+            scores["QUALITY"]=.22*rs63+.12*rs21+.08*r63+.05*r126+.23*trend+.20*lowvol+.07*d52+.03*vr
+            scores["BALANCED"]=.32*rs63+.18*rs21+.08*r63+.05*r126+.17*trend+.12*lowvol+.05*d52+.03*vr
+        else:
+            scores.update({"RS":base,"QUALITY":base,"BALANCED":base})
+        nr=float((z.iloc[0].fnifty/z.iloc[0].nifty-1)*100)
+        for name,score in scores.items():
+            p=z.assign(_score=score).nlargest(top_n,"_score").copy()
+            pr=float(((p.future/p.price-1)*100).mean())
+            rows[name].append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),"nifty_return":round(nr,2),
+                               "excess":round(pr-nr,2),"trend_regime":regime})
+
+    evals={k:v[warmup_months:] for k,v in rows.items()}
+    if len(evals["BASE"])<10: raise ValueError("Not enough history for v1.5 validation")
+    base=_metrics(evals["BASE"])
+    candidates=[]
+    for name,label in [("RS","Relative Strength"),("QUALITY","Trend + Low Vol"),("BALANCED","Balanced")]:
+        allm=_metrics(evals[name])
+        sw=_metrics([r for r in evals[name] if r["trend_regime"]=="SIDEWAYS"])
+        candidates.append({"id":name,"name":label,"overall":allm,"sideways":sw})
+    # This is a research comparison, not automatic model selection.
+    winner=max(candidates,key=lambda x:(x["sideways"]["avg_excess"],x["sideways"]["beat_nifty"],-x["overall"]["max_drawdown"]))
+    passed=(winner["sideways"]["avg_excess"]>0 and winner["sideways"]["beat_nifty"]>50
+            and winner["overall"]["avg_excess"]>=base["avg_excess"]
+            and winner["overall"]["beat_nifty"]>=base["beat_nifty"]
+            and winner["overall"]["max_drawdown"]<=base["max_drawdown"]+2)
+    return {"engine":"v1.5 Sideways-Market Optimizer","evaluation_months":len(evals["BASE"]),"baseline":base,
+            "candidates":candidates,"best_candidate":winner["name"],"verdict":"PASS" if passed else "REJECT",
+            "rules":["Bullish/Bearish months use frozen v1.2 ranking unchanged",
+                     "Relative Strength: strongly favors RS63/RS21 in sideways markets",
+                     "Trend + Low Vol: favors EMA trend quality and lower realized volatility",
+                     "Balanced: combines relative strength, trend quality and low volatility"],
+            "pass_rule":"Best predefined candidate must make SIDEWAYS excess positive and beat NIFTY >50%, while not reducing overall excess/beat rate or worsening drawdown by more than 2pp.",
+            "warning":"Research test only. Candidate comparison is performed on the same historical evaluation set, so a PASS still requires a later untouched/rolling confirmation before promotion."}

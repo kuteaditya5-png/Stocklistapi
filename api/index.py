@@ -408,6 +408,12 @@ def research_regime_aware_validation():
     return regime_aware_validation(_representative_universe(20), period="5y", top_n=3, warmup_months=18, block_months=6)
 
 
+@app.get("/api/research/sideways-optimizer")
+def research_sideways_optimizer():
+    from monthly_ranker import sideways_optimizer_validation
+    return sideways_optimizer_validation(_representative_universe(20), period="5y", top_n=3, warmup_months=18)
+
+
 @app.get("/api/portfolio")
 def portfolio(
     amount: float = Query(..., gt=0),
