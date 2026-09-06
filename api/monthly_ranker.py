@@ -50,3 +50,75 @@ def monthly_ranking_backtest(symbols,period="5y",top_n=3):
     cut=int(len(months)*.75); research=months[:cut]; unseen=months[cut:]; a=_metrics(research); u=_metrics(unseen)
     passed=u['months']>=6 and u['avg_excess']>0 and u['beat_nifty']>50
     return {"engine":"v1.1 Monthly Cross-Sectional Ranking","total_months":len(months),"research":a,"unseen":u,"verdict":"PASS" if passed else "REJECT","approved_for_live_candidate":passed,"recent_unseen":unseen[-6:],"weights":{"3M relative strength":25,"1M relative strength":15,"3M momentum":15,"6M momentum":10,"trend":10,"low volatility":10,"near 52-week high":10,"volume strength":5},"warning":"Technical/market-data research only; current-universe history can have survivorship bias. PASS is not a return guarantee."}
+
+
+def rolling_validation(symbols, period="5y", top_n=3, warmup_months=18, block_months=6):
+    """v1.2 frozen-rule rolling historical validation.
+
+    Uses the same point-in-time technical ranking as v1.1. No weights or thresholds
+    are re-fit inside the evaluation window. The initial months are treated as a
+    research/warm-up segment; all later months are reported in sequential blocks.
+    """
+    base = monthly_ranking_backtest(symbols, period=period, top_n=top_n)
+    # Rebuild the monthly observations by joining the two chronological v1.1 segments.
+    # monthly_ranking_backtest exposes only the recent unseen rows, so generate a
+    # compact chronological series from a private helper-compatible rerun below.
+    rows = _monthly_rows(symbols, period=period, top_n=top_n)
+    if len(rows) <= warmup_months + 6:
+        raise ValueError("Not enough history for rolling validation")
+    evaluation = rows[warmup_months:]
+    blocks=[]
+    for i in range(0, len(evaluation), block_months):
+        chunk=evaluation[i:i+block_months]
+        if len(chunk)<3: continue
+        m=_metrics(chunk)
+        blocks.append({"block":len(blocks)+1,"start":chunk[0]["date"],"end":chunk[-1]["date"],**m})
+    overall=_metrics(evaluation)
+    p=np.array([r["portfolio_return"] for r in evaluation],dtype=float)
+    n=np.array([r["nifty_return"] for r in evaluation],dtype=float)
+    overall["cumulative_return"]=round(float((np.prod(1+p/100)-1)*100),2)
+    overall["nifty_cumulative"]=round(float((np.prod(1+n/100)-1)*100),2)
+    overall["cumulative_excess"]=round(overall["cumulative_return"]-overall["nifty_cumulative"],2)
+    positive_blocks=sum(1 for b in blocks if b["avg_excess"]>0)
+    beat_blocks=sum(1 for b in blocks if b["beat_nifty"]>50)
+    stable=(len(blocks)>=3 and positive_blocks/len(blocks)>=0.6 and beat_blocks/len(blocks)>=0.6)
+    passed=(overall["months"]>=18 and overall["avg_excess"]>0 and overall["beat_nifty"]>50 and stable)
+    return {
+        "engine":"v1.2 Rolling Historical Validation",
+        "frozen_universe":len(symbols),"top_n":top_n,"warmup_months":warmup_months,
+        "evaluation":overall,"blocks":blocks,
+        "positive_excess_blocks":positive_blocks,"nifty_beating_blocks":beat_blocks,
+        "verdict":"PASS" if passed else "REJECT",
+        "warning":"Historical rolling validation, not future accuracy. The current-stock universe can create survivorship bias; transaction costs, taxes and slippage are not included."
+    }
+
+
+def _monthly_rows(symbols,period="5y",top_n=3):
+    raw=yf.download(symbols+["^NSEI"],period=period,interval="1d",auto_adjust=True,progress=False,threads=True,group_by="ticker")
+    fs={s:_frame(raw,s) for s in symbols+["^NSEI"]}; b=fs["^NSEI"]["Close"].copy(); b.index=pd.DatetimeIndex(b.index).tz_localize(None).normalize()
+    prep={}
+    for s in symbols:
+        x=fs[s].copy()
+        if len(x)<300: continue
+        x.index=pd.DatetimeIndex(x.index).tz_localize(None).normalize(); x["NIFTY"]=b.reindex(x.index).ffill()
+        x["R21"]=x.Close.pct_change(21); x["R63"]=x.Close.pct_change(63); x["R126"]=x.Close.pct_change(126)
+        x["RS21"]=x.R21-x.NIFTY.pct_change(21); x["RS63"]=x.R63-x.NIFTY.pct_change(63)
+        x["E50"]=x.Close.ewm(span=50,adjust=False).mean(); x["E200"]=x.Close.ewm(span=200,adjust=False).mean()
+        x["VOL"]=x.Close.pct_change().rolling(20).std(); x["D52"]=x.Close/x.Close.rolling(252).max()-1; x["VR"]=x.Volume/x.Volume.rolling(20).mean(); prep[s]=x
+    months=[]
+    for dt in list(b.index[260:-22:21]):
+        q=[]
+        for s,x in prep.items():
+            h=x.loc[x.index<=dt]
+            if h.empty: continue
+            i=x.index.get_loc(h.index[-1])
+            if not isinstance(i,(int,np.integer)) or i+21>=len(x): continue
+            r=x.iloc[i]; f=x.iloc[i+21]; keys=["R21","R63","R126","RS21","RS63","E50","E200","VOL","D52","VR","NIFTY"]
+            if any(pd.isna(r[k]) for k in keys): continue
+            q.append(dict(symbol=s.replace('.NS',''),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
+        if len(q)<top_n: continue
+        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        z['score']=.25*_pct(z.rs63)+.15*_pct(z.rs21)+.15*_pct(z.r63)+.10*_pct(z.r126)+.10*trend+.10*_pct(z.vol,False)+.10*_pct(z.d52)+.05*_pct(z.vr)
+        p=z.nlargest(top_n,'score').copy(); p['ret']=(p.future/p.price-1)*100; pr=float(p.ret.mean()); nr=float((p.iloc[0].fnifty/p.iloc[0].nifty-1)*100)
+        months.append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),"nifty_return":round(nr,2),"excess":round(pr-nr,2)})
+    return months

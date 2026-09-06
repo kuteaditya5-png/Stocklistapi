@@ -389,6 +389,13 @@ def research_monthly_ranking(limit_universe: int = Query(20, ge=5, le=50), top_n
     return monthly_ranking_backtest(_representative_universe(limit_universe), period=period if period in {"2y","5y"} else "5y", top_n=top_n)
 
 
+@app.get("/api/research/rolling-validation")
+def research_rolling_validation():
+    from monthly_ranker import rolling_validation
+    # v1.2 deliberately freezes the winner of the predefined v1.1 comparison.
+    return rolling_validation(_representative_universe(20), period="5y", top_n=3, warmup_months=18, block_months=6)
+
+
 @app.get("/api/portfolio")
 def portfolio(
     amount: float = Query(..., gt=0),
