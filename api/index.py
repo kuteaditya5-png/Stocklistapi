@@ -396,6 +396,12 @@ def research_rolling_validation():
     return rolling_validation(_representative_universe(20), period="5y", top_n=3, warmup_months=18, block_months=6)
 
 
+@app.get("/api/research/regime-validation")
+def research_regime_validation():
+    from monthly_ranker import regime_validation
+    return regime_validation(_representative_universe(20), period="5y", top_n=3, warmup_months=18)
+
+
 @app.get("/api/portfolio")
 def portfolio(
     amount: float = Query(..., gt=0),
