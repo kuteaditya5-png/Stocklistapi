@@ -513,3 +513,9 @@ def research_v16_holdout_confirmation():
 def research_v17_stress_robustness():
     from monthly_ranker import stress_robustness_validation
     return stress_robustness_validation(_representative_universe(20), period="10y")
+
+
+@app.get("/api/research/v18-execution-cost")
+def research_v18_execution_cost():
+    from monthly_ranker import execution_cost_validation
+    return execution_cost_validation(_representative_universe(20), period="10y")

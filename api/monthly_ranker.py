@@ -497,3 +497,91 @@ def stress_robustness_validation(symbols, period="10y"):
       "verdict":"PASS" if passed else "REVIEW",
       "pass_rule":"Frozen Top-3 must retain positive overall excess; Top-2/3/4/5 must not have negative average excess; all small predefined weight perturbations must retain positive overall excess; frozen SIDEWAYS performance must stay positive and beat NIFTY >50%; and both chronological halves must retain positive excess.",
       "warning":"Stress test only. The v1.5 winner remains frozen; perturbations are sensitivity diagnostics, not retuning. Historical tests remain subject to survivorship/data-quality bias and are not a guarantee of future returns."}
+
+
+def execution_cost_validation(symbols, period="10y"):
+    """v1.8: execution/cost validation of the frozen Trend + Low Vol Top-3 model."""
+    raw=yf.download(symbols+["^NSEI"],period=period,interval="1d",auto_adjust=True,progress=False,threads=True,group_by="ticker")
+    fs={s:_frame(raw,s) for s in symbols+["^NSEI"]}; b=fs["^NSEI"]["Close"].copy()
+    b.index=pd.DatetimeIndex(b.index).tz_localize(None).normalize()
+    if len(b)<1500: raise ValueError("Not enough long history for v1.8 execution validation")
+    bm=pd.DataFrame({"Close":b}); bm["R63"]=bm.Close.pct_change(63); bm["E200"]=bm.Close.ewm(span=200,adjust=False).mean()
+    prep={}
+    for s in symbols:
+        x=fs[s].copy()
+        if len(x)<500: continue
+        x.index=pd.DatetimeIndex(x.index).tz_localize(None).normalize(); x["NIFTY"]=b.reindex(x.index).ffill()
+        x["R21"]=x.Close.pct_change(21); x["R63"]=x.Close.pct_change(63); x["R126"]=x.Close.pct_change(126)
+        x["RS21"]=x.R21-x.NIFTY.pct_change(21); x["RS63"]=x.R63-x.NIFTY.pct_change(63)
+        x["E50"]=x.Close.ewm(span=50,adjust=False).mean(); x["E200"]=x.Close.ewm(span=200,adjust=False).mean()
+        x["VOL"]=x.Close.pct_change().rolling(20).std(); x["D52"]=x.Close/x.Close.rolling(252).max()-1
+        x["VR"]=x.Volume/x.Volume.rolling(20).mean(); prep[s]=x
+
+    frozen_w=(.22,.12,.08,.05,.23,.20,.07,.03)
+    rows=[]
+    dates=b.index[260:-22:21]
+    for dt in dates:
+        if dt not in bm.index: continue
+        br=bm.loc[dt]
+        if pd.isna(br.R63) or pd.isna(br.E200): continue
+        regime="BULLISH" if br.Close>br.E200 and br.R63>0.03 else ("BEARISH" if br.Close<br.E200 and br.R63<-0.03 else "SIDEWAYS")
+        q=[]
+        for s,x in prep.items():
+            h=x.loc[x.index<=dt]
+            if h.empty: continue
+            i=x.index.get_loc(h.index[-1])
+            if not isinstance(i,(int,np.integer)) or i+21>=len(x): continue
+            r=x.iloc[i]; f=x.iloc[i+21]
+            keys=["R21","R63","R126","RS21","RS63","E50","E200","VOL","D52","VR","NIFTY"]
+            if any(pd.isna(r[k]) for k in keys): continue
+            q.append(dict(symbol=s.replace(".NS",""),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),
+              r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),
+              vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
+        if len(q)<5: continue
+        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        feats=[_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr)]
+        base=.25*feats[0]+.15*feats[1]+.15*feats[2]+.10*feats[3]+.10*feats[4]+.10*feats[5]+.10*feats[6]+.05*feats[7]
+        score=sum(float(wi)*fi for wi,fi in zip(frozen_w,feats)) if regime=="SIDEWAYS" else base
+        pick=z.assign(_score=score).nlargest(3,"_score")
+        pr=float(((pick.future/pick.price-1)*100).mean())
+        nr=float((z.iloc[0].fnifty/z.iloc[0].nifty-1)*100)
+        rows.append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":pr,"nifty_return":nr,
+                     "excess":pr-nr,"picks":pick.symbol.tolist(),"trend_regime":regime})
+    if len(rows)<36: raise ValueError("Not enough monthly observations for v1.8")
+
+    turnovers=[]; prev=None
+    for r in rows:
+        cur=set(r["picks"])
+        turnovers.append(1.0 if prev is None else 1.0-len(cur & prev)/3.0)
+        prev=cur
+
+    def net_rows(total_bps, timing_bps=0):
+        out=[]
+        for r,turn in zip(rows,turnovers):
+            # total_bps is round-trip friction on the fraction of portfolio replaced.
+            # timing_bps is an additional adverse implementation assumption.
+            cost_pct=((total_bps*turn)+timing_bps)/100.0
+            x=dict(r); x["portfolio_return"]=r["portfolio_return"]-cost_pct
+            x["excess"]=x["portfolio_return"]-r["nifty_return"]; out.append(x)
+        return out
+
+    gross=_metrics(rows)
+    scenarios=[]
+    for name,bps in [("Low friction",10),("Base realistic",25),("High friction",50),("Stress",100)]:
+        m=_metrics(net_rows(bps))
+        scenarios.append({"name":name,"round_trip_bps":bps,**m})
+    timing=[]
+    for name,extra in [("Signal close",0),("Next-session execution",15),("Adverse gap stress",35)]:
+        m=_metrics(net_rows(25,extra))
+        timing.append({"name":name,"base_cost_bps":25,"extra_timing_bps":extra,**m})
+
+    avg_turn=round(float(np.mean(turnovers))*100,1)
+    base=scenarios[1]; stress=scenarios[-1]
+    passed=(base["avg_excess"]>0 and base["beat_nifty"]>50 and stress["avg_excess"]>0
+            and timing[-1]["avg_excess"]>0)
+    return {"engine":"v1.8 Execution & Cost Validation","frozen_candidate":"Trend + Low Vol",
+      "months":len(rows),"gross":gross,"average_monthly_turnover_pct":avg_turn,
+      "cost_scenarios":scenarios,"timing_sensitivity":timing,
+      "verdict":"PASS" if passed else "REVIEW",
+      "pass_rule":"Frozen model must keep positive average excess and >50% NIFTY-beat rate at 25 bps base friction, remain positive at 100 bps round-trip stress, and retain positive excess under the adverse timing stress. No ranking weights are retuned.",
+      "warning":"Execution-cost research only. Cost assumptions are simplified and actual brokerage, taxes/fees, spread, slippage and market impact vary. The frozen Trend + Low Vol ranking is unchanged."}
