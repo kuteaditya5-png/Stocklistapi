@@ -158,6 +158,8 @@
     <button class="optimizer-btn" onclick="runSidewaysOptimizer()">Run v1.5 Sideways Optimizer</button>
     <div><small>v1.6 Frozen winner confirmation</small><div class="money">Trend + Low Vol → older holdout excluded from v1.5 selection</div></div>
     <button class="optimizer-btn" onclick="runV16Confirmation()">Run v1.6 Holdout Confirmation</button>
+    <div><small>v1.7 Stress & robustness</small><div class="money">Frozen Trend + Low Vol → Top-N, weight, regime & time stability</div></div>
+    <button class="optimizer-btn" onclick="runV17Robustness()">Run v1.7 Stress Test</button>
   </section>
 
   <div id="status" class="status">
@@ -670,6 +672,33 @@ async function runV16Confirmation(){
 
 updatePriceText();
 backtestEngineChanged();
+
+async function runV17Robustness(){
+ const st=document.getElementById('status'),cards=document.getElementById('cards');
+ st.innerHTML='<b>Running v1.7 stress & robustness validation…</b>';cards.innerHTML='';
+ try{
+  const r=await fetch('/api/research/v17-stress-robustness'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
+  const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REVIEW</span>';
+  const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;
+  st.innerHTML=`Stress-tested <b>${d.months}</b> monthly portfolios with frozen <b>${d.frozen_candidate}</b>. ${v}`;
+  const tn=Object.entries(d.top_n_sensitivity).map(([n,x])=>row('Top '+n,x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
+  const wp=d.weight_perturbations.map(x=>row(x.name,x.overall.avg_excess+'% overall',x.sideways.avg_excess+'% sideways')).join('');
+  const rg=Object.entries(d.trend_regimes).map(([n,x])=>row(n,x.months+' mo · '+x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
+  const vr=Object.entries(d.volatility_regimes).map(([n,x])=>row(n+' VOL',x.months+' mo · '+x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
+  const ch=Object.entries(d.chronological_stability).map(([n,x])=>row(n,x.months+' mo · '+x.avg_excess+'% excess',x.max_drawdown+'% DD')).join('');
+  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.7 STRESS & ROBUSTNESS</b><span>Frozen v1.5 winner — no retuning</span></div>
+   <div class="compare-head"><span>Core result</span><b>Performance</b><b>Stability</b></div>
+   ${row('Frozen Top 3',d.overall.avg_excess+'% excess',d.overall.beat_nifty+'% beat · '+d.overall.max_drawdown+'% DD')}
+   <div class="caveat"><b>Top-N sensitivity</b>${tn}</div>
+   <div class="caveat"><b>Small weight perturbations</b>${wp}</div>
+   <div class="caveat"><b>Trend regimes</b>${rg}</div>
+   <div class="caveat"><b>Volatility regimes</b>${vr}</div>
+   <div class="caveat"><b>Chronological stability</b>${ch}</div>
+   <div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div>
+   <div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
+ }catch(e){st.textContent='v1.7 robustness test failed: '+e.message}
+}
+
 </script>
 </body>
 </html>
