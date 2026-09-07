@@ -164,6 +164,8 @@
     <button class="optimizer-btn" onclick="runV18Execution()">Run v1.8 Execution Test</button>
     <div><small>v1.9 Realistic portfolio simulation</small><div class="money">₹100,000 → whole shares → monthly Top 3 → 25 bps costs</div></div>
     <button class="optimizer-btn" onclick="runV19Portfolio()">Run v1.9 Portfolio Simulation</button>
+    <div><small>v2.0 Final stability validation</small><div class="money">Frozen model → final risk & production-readiness gate</div></div>
+    <button class="optimizer-btn" onclick="runV20Final()">Run v2.0 Final Validation</button>
   </section>
 
   <div id="status" class="status">
@@ -733,6 +735,14 @@ async function runV19Portfolio(){
  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.9 REALISTIC PORTFOLIO SIMULATION</b><span>Frozen v1.5 winner — no retuning</span></div><div class="compare-head"><span>Metric</span><b>StockLens</b><b>NIFTY / implementation</b></div>${row('Initial capital','₹'+d.initial_capital.toLocaleString('en-IN'),d.cost_bps+' bps cost')}${row('Final capital','₹'+d.final_capital.toLocaleString('en-IN'),'₹'+d.nifty_final_capital.toLocaleString('en-IN'))}${row('Cumulative return',d.total_return_pct+'%',d.nifty_total_return_pct+'% NIFTY')}${row('Average monthly excess',d.avg_monthly_excess_pct+'%',d.beat_nifty_pct+'% beat NIFTY')}${row('Max drawdown',d.max_drawdown_pct+'%','₹'+d.total_cost.toLocaleString('en-IN')+' total costs')}${row('Average leftover cash','₹'+d.avg_cash_left.toLocaleString('en-IN'),'Whole-share sizing')}<div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.9 portfolio simulation failed: '+e.message}
 }
 
+
+async function runV20Final(){
+ const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v2.0 final stability validation…</b>';cards.innerHTML='';
+ try{const r=await fetch('/api/research/v20-final-stability?capital=100000'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
+ const cls=d.verdict==='STABLE'?'pass':'fail',v=`<span class="verdict ${cls}">${d.verdict}</span>`;const row=(l,x,y)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b>${y}</b></div>`;
+ st.innerHTML=`Final validation of <b>${d.months}</b> frozen monthly portfolios. ${v}`;
+ cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v2.0 FINAL STABILITY VALIDATION</b><span>Frozen v1.5 winner — no retuning</span></div><div class="compare-head"><span>Metric</span><b>StockLens</b><b>NIFTY / risk</b></div>${row('Final capital','₹'+d.final_capital.toLocaleString('en-IN'),'₹'+d.nifty_final_capital.toLocaleString('en-IN'))}${row('Cumulative return',d.cumulative_return_pct+'%',d.nifty_cumulative_return_pct+'% NIFTY')}${row('CAGR',d.cagr_pct+'%',d.nifty_cagr_pct+'% NIFTY')}${row('Average monthly excess',d.avg_monthly_excess_pct+'%',d.beat_nifty_pct+'% beat NIFTY')}${row('Max drawdown',d.max_drawdown_pct+'%','₹'+d.total_cost.toLocaleString('en-IN')+' costs')}${row('Recent 6M annualized volatility',d.recent_6m_annualized_volatility_pct+'%',(d.recent_6m_sharpe_proxy??'N/A')+' Sharpe proxy')}${row('Recent 6M worst month',d.recent_6m_worst_month_pct+'%',d.recent_6m_positive_months_pct+'% positive')}<div class="caveat important"><b>STABLE rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v2.0 final validation failed: '+e.message}
+}
 </script>
 </body>
 </html>
