@@ -585,3 +585,68 @@ def execution_cost_validation(symbols, period="10y"):
       "verdict":"PASS" if passed else "REVIEW",
       "pass_rule":"Frozen model must keep positive average excess and >50% NIFTY-beat rate at 25 bps base friction, remain positive at 100 bps round-trip stress, and retain positive excess under the adverse timing stress. No ranking weights are retuned.",
       "warning":"Execution-cost research only. Cost assumptions are simplified and actual brokerage, taxes/fees, spread, slippage and market impact vary. The frozen Trend + Low Vol ranking is unchanged."}
+
+
+def realistic_portfolio_simulation(symbols, period="10y", initial_capital=100000.0, cost_bps=25):
+    """v1.9: whole-share monthly portfolio simulation for frozen Trend + Low Vol Top-3."""
+    raw=yf.download(symbols+["^NSEI"],period=period,interval="1d",auto_adjust=True,progress=False,threads=True,group_by="ticker")
+    fs={s:_frame(raw,s) for s in symbols+["^NSEI"]}; b=fs["^NSEI"]["Close"].copy()
+    b.index=pd.DatetimeIndex(b.index).tz_localize(None).normalize()
+    if len(b)<1500: raise ValueError("Not enough long history for v1.9 portfolio simulation")
+    bm=pd.DataFrame({"Close":b}); bm["R63"]=bm.Close.pct_change(63); bm["E200"]=bm.Close.ewm(span=200,adjust=False).mean()
+    prep={}
+    for s in symbols:
+        x=fs[s].copy()
+        if len(x)<500: continue
+        x.index=pd.DatetimeIndex(x.index).tz_localize(None).normalize(); x["NIFTY"]=b.reindex(x.index).ffill()
+        x["R21"]=x.Close.pct_change(21); x["R63"]=x.Close.pct_change(63); x["R126"]=x.Close.pct_change(126)
+        x["RS21"]=x.R21-x.NIFTY.pct_change(21); x["RS63"]=x.R63-x.NIFTY.pct_change(63)
+        x["E50"]=x.Close.ewm(span=50,adjust=False).mean(); x["E200"]=x.Close.ewm(span=200,adjust=False).mean()
+        x["VOL"]=x.Close.pct_change().rolling(20).std(); x["D52"]=x.Close/x.Close.rolling(252).max()-1
+        x["VR"]=x.Volume/x.Volume.rolling(20).mean(); prep[s]=x
+    frozen_w=(.22,.12,.08,.05,.23,.20,.07,.03)
+    obs=[]
+    for dt in b.index[260:-22:21]:
+        if dt not in bm.index: continue
+        br=bm.loc[dt]
+        if pd.isna(br.R63) or pd.isna(br.E200): continue
+        regime="BULLISH" if br.Close>br.E200 and br.R63>0.03 else ("BEARISH" if br.Close<br.E200 and br.R63<-0.03 else "SIDEWAYS")
+        q=[]
+        for s,x in prep.items():
+            h=x.loc[x.index<=dt]
+            if h.empty: continue
+            i=x.index.get_loc(h.index[-1])
+            if not isinstance(i,(int,np.integer)) or i+21>=len(x): continue
+            r=x.iloc[i]; f=x.iloc[i+21]
+            keys=["R21","R63","R126","RS21","RS63","E50","E200","VOL","D52","VR","NIFTY"]
+            if any(pd.isna(r[k]) for k in keys): continue
+            q.append(dict(symbol=s.replace(".NS",""),price=float(r.Close),future=float(f.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
+        if len(q)<5: continue
+        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        feats=[_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr)]
+        base=.25*feats[0]+.15*feats[1]+.15*feats[2]+.10*feats[3]+.10*feats[4]+.10*feats[5]+.10*feats[6]+.05*feats[7]
+        score=sum(float(w)*f for w,f in zip(frozen_w,feats)) if regime=="SIDEWAYS" else base
+        pick=z.assign(_score=score).nlargest(3,"_score")
+        obs.append((dt,pick,float(z.iloc[0].nifty),float(z.iloc[0].fnifty),regime))
+    if len(obs)<36: raise ValueError("Not enough monthly observations for v1.9")
+    capital=float(initial_capital); nifty_cap=float(initial_capital); prev=set(); curve=[]; months=[]
+    for dt,pick,n0,n1,regime in obs:
+        start=capital; target=start/3.0; invested=0.0; end_stock=0.0; details=[]
+        cur=set(pick.symbol.tolist()); turnover=1.0 if not prev else 1.0-len(cur & prev)/3.0
+        cost=start*turnover*(float(cost_bps)/10000.0)
+        available=max(0.0,start-cost)
+        target=available/3.0
+        for _,r in pick.iterrows():
+            qty=int(target//float(r.price)); buy=qty*float(r.price); sell=qty*float(r.future)
+            invested+=buy; end_stock+=sell
+            details.append({"symbol":r.symbol,"qty":qty,"buy_price":round(float(r.price),2),"exit_price":round(float(r.future),2)})
+        cash=available-invested; capital=end_stock+cash
+        nifty_cap*=n1/n0
+        ret=(capital/start-1)*100 if start else 0; nret=(n1/n0-1)*100
+        curve.append(capital); months.append({"date":str(pd.Timestamp(dt).date()),"start_capital":round(start,2),"end_capital":round(capital,2),"return_pct":round(ret,2),"nifty_return_pct":round(nret,2),"cost":round(cost,2),"cash_left":round(cash,2),"turnover_pct":round(turnover*100,1),"regime":regime,"holdings":details}); prev=cur
+    arr=np.array(curve,float); peaks=np.maximum.accumulate(arr); dd=(arr/peaks-1)*100
+    rets=np.array([m["return_pct"] for m in months]); nrets=np.array([m["nifty_return_pct"] for m in months])
+    excess=rets-nrets; beat=float(np.mean(rets>nrets)*100)
+    total=(capital/initial_capital-1)*100; ntotal=(nifty_cap/initial_capital-1)*100
+    passed=(capital>initial_capital and total>ntotal and float(np.mean(excess))>0 and beat>=50)
+    return {"engine":"v1.9 Realistic Portfolio Simulation","frozen_candidate":"Trend + Low Vol","initial_capital":initial_capital,"cost_bps":cost_bps,"months":len(months),"final_capital":round(capital,2),"total_return_pct":round(total,2),"nifty_final_capital":round(nifty_cap,2),"nifty_total_return_pct":round(ntotal,2),"avg_monthly_return_pct":round(float(np.mean(rets)),2),"avg_monthly_excess_pct":round(float(np.mean(excess)),2),"beat_nifty_pct":round(beat,1),"max_drawdown_pct":round(abs(float(np.min(dd))),2),"avg_cash_left":round(float(np.mean([m['cash_left'] for m in months])),2),"total_cost":round(float(np.sum([m['cost'] for m in months])),2),"verdict":"PASS" if passed else "REVIEW","recent_months":months[-6:],"pass_rule":"With whole-share sizing and 25 bps turnover costs, final capital must grow, beat NIFTY cumulatively, retain positive average monthly excess, and beat NIFTY in at least 50% of tested months. Frozen ranking weights are not retuned.","warning":"Historical portfolio simulation only. Whole-share sizing and simplified costs are more realistic than percentage-only backtests, but taxes, liquidity, corporate actions, spreads and live execution can differ."}

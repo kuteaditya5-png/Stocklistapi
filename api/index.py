@@ -519,3 +519,8 @@ def research_v17_stress_robustness():
 def research_v18_execution_cost():
     from monthly_ranker import execution_cost_validation
     return execution_cost_validation(_representative_universe(20), period="10y")
+
+@app.get("/api/research/v19-portfolio-simulation")
+def research_v19_portfolio_simulation(capital: float = 100000):
+    from monthly_ranker import realistic_portfolio_simulation
+    return realistic_portfolio_simulation(_representative_universe(20), period="10y", initial_capital=capital, cost_bps=25)
