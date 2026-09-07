@@ -502,3 +502,8 @@ def portfolio(
             "or investment advice."
         ),
     }
+
+@app.get("/api/research/v16-holdout-confirmation")
+def research_v16_holdout_confirmation():
+    from monthly_ranker import sideways_holdout_confirmation
+    return sideways_holdout_confirmation(_representative_universe(20), period="10y", top_n=3)

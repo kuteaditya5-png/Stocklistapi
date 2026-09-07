@@ -350,3 +350,55 @@ def sideways_optimizer_validation(symbols, period="5y", top_n=3, warmup_months=1
                      "Balanced: combines relative strength, trend quality and low volatility"],
             "pass_rule":"Best predefined candidate must make SIDEWAYS excess positive and beat NIFTY >50%, while not reducing overall excess/beat rate or worsening drawdown by more than 2pp.",
             "warning":"Research test only. Candidate comparison is performed on the same historical evaluation set, so a PASS still requires a later untouched/rolling confirmation before promotion."}
+
+
+def sideways_holdout_confirmation(symbols, period="10y", top_n=3):
+    """v1.6: freeze v1.5 Trend + Low Vol and test only dates outside v1.5's 5-year selection window.
+    This is a backward pre-selection holdout, not future data. No candidate tuning occurs here.
+    """
+    raw=yf.download(symbols+["^NSEI"],period=period,interval="1d",auto_adjust=True,progress=False,threads=True,group_by="ticker")
+    fs={s:_frame(raw,s) for s in symbols+["^NSEI"]}; b=fs["^NSEI"]["Close"].copy(); b.index=pd.DatetimeIndex(b.index).tz_localize(None).normalize()
+    if len(b)<1500: raise ValueError("Not enough long history for v1.6 holdout confirmation")
+    # v1.5 used period='5y'. Exclude the most recent 5 calendar years entirely.
+    cutoff=(b.index.max()-pd.DateOffset(years=5)).normalize()
+    bm=pd.DataFrame({"Close":b}); bm["R63"]=bm.Close.pct_change(63); bm["E200"]=bm.Close.ewm(span=200,adjust=False).mean()
+    prep={}
+    for s in symbols:
+        x=fs[s].copy()
+        if len(x)<500: continue
+        x.index=pd.DatetimeIndex(x.index).tz_localize(None).normalize(); x["NIFTY"]=b.reindex(x.index).ffill()
+        x["R21"]=x.Close.pct_change(21); x["R63"]=x.Close.pct_change(63); x["R126"]=x.Close.pct_change(126)
+        x["RS21"]=x.R21-x.NIFTY.pct_change(21); x["RS63"]=x.R63-x.NIFTY.pct_change(63)
+        x["E50"]=x.Close.ewm(span=50,adjust=False).mean(); x["E200"]=x.Close.ewm(span=200,adjust=False).mean()
+        x["VOL"]=x.Close.pct_change().rolling(20).std(); x["D52"]=x.Close/x.Close.rolling(252).max()-1; x["VR"]=x.Volume/x.Volume.rolling(20).mean(); prep[s]=x
+    base_rows=[]; cand_rows=[]
+    dates=[dt for dt in b.index[260:-22:21] if dt < cutoff]
+    for dt in dates:
+        if dt not in bm.index: continue
+        br=bm.loc[dt]
+        if pd.isna(br.R63) or pd.isna(br.E200): continue
+        regime="BULLISH" if br.Close>br.E200 and br.R63>0.03 else ("BEARISH" if br.Close<br.E200 and br.R63<-0.03 else "SIDEWAYS")
+        q=[]
+        for s,x in prep.items():
+            h=x.loc[x.index<=dt]
+            if h.empty: continue
+            i=x.index.get_loc(h.index[-1])
+            if not isinstance(i,(int,np.integer)) or i+21>=len(x): continue
+            r=x.iloc[i]; f=x.iloc[i+21]; keys=["R21","R63","R126","RS21","RS63","E50","E200","VOL","D52","VR","NIFTY"]
+            if any(pd.isna(r[k]) for k in keys): continue
+            q.append(dict(symbol=s.replace(".NS",""),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
+        if len(q)<top_n: continue
+        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        rs63=_pct(z.rs63); rs21=_pct(z.rs21); r63=_pct(z.r63); r126=_pct(z.r126); lowvol=_pct(z.vol,False); d52=_pct(z.d52); vr=_pct(z.vr)
+        base=.25*rs63+.15*rs21+.15*r63+.10*r126+.10*trend+.10*lowvol+.10*d52+.05*vr
+        # Frozen v1.5 winner. Do not change these weights in v1.6.
+        quality=.22*rs63+.12*rs21+.08*r63+.05*r126+.23*trend+.20*lowvol+.07*d52+.03*vr if regime=="SIDEWAYS" else base
+        nr=float((z.iloc[0].fnifty/z.iloc[0].nifty-1)*100)
+        for score,target in [(base,base_rows),(quality,cand_rows)]:
+            p=z.assign(_score=score).nlargest(top_n,"_score").copy(); pr=float(((p.future/p.price-1)*100).mean())
+            target.append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),"nifty_return":round(nr,2),"excess":round(pr-nr,2),"trend_regime":regime})
+    if len(cand_rows)<12: raise ValueError("Not enough pre-selection holdout months for v1.6")
+    mb=_metrics(base_rows); mc=_metrics(cand_rows)
+    bsw=_metrics([r for r in base_rows if r["trend_regime"]=="SIDEWAYS"]); csw=_metrics([r for r in cand_rows if r["trend_regime"]=="SIDEWAYS"])
+    passed=(csw["months"]>=6 and csw["avg_excess"]>0 and csw["beat_nifty"]>50 and mc["avg_excess"]>=mb["avg_excess"] and mc["max_drawdown"]<=mb["max_drawdown"]+2)
+    return {"engine":"v1.6 Frozen Winner Holdout Confirmation","holdout_start":cand_rows[0]["date"],"holdout_end":cand_rows[-1]["date"],"selection_window_excluded_from":str(cutoff.date()),"baseline":mb,"candidate":mc,"baseline_sideways":bsw,"candidate_sideways":csw,"verdict":"PASS" if passed else "REJECT","frozen_candidate":"Trend + Low Vol","pass_rule":"At least 6 SIDEWAYS holdout months, positive SIDEWAYS excess, >50% SIDEWAYS NIFTY-beat rate, no reduction in overall average excess versus frozen v1.2, and drawdown no more than 2pp worse.","warning":"v1.6 uses older pre-selection history excluded from v1.5's 5-year optimization window. This is a genuine out-of-selection historical holdout, but it is backward-looking—not future live validation—and current-universe survivorship bias can remain."}
