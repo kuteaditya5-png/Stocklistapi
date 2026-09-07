@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockLens AI</title>
+<title>StockLens AI v2.0 Stable</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
     <b>StockLens <span>AI</span></b>
     <small>Analyze. Rank. Trade Smarter.</small>
   </div>
-  <i>● Data-driven research</i>
+  <i>● v2.0 STABLE · Frozen validated model</i>
 </header>
 
 <main>
@@ -20,7 +20,6 @@
     <button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button>
     <button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button>
     <button class="tab" onclick="mode('backtest',this)">📊 Accuracy & Backtest</button>
-    <button class="tab" onclick="mode('lab',this)">🧪 Strategy Lab</button>
   </div>
 
   <section class="hero">
@@ -132,41 +131,6 @@
     <button onclick="runBacktest()">Run Backtest</button>
   </section>
 
-  <section id="labControls" class="controls hide">
-    <div>
-      <small>Strategy to improve</small>
-      <select id="labEngine">
-        <option value="intraday" selected>Intraday</option>
-        <option value="monthly">1-Month technical proxy</option>
-      </select>
-    </div>
-    <div>
-      <small>Representative stocks</small>
-      <select id="labLimit"><option value="3">3 — Fast</option><option value="5" selected>5 — Better sample</option></select>
-    </div>
-    <div><small>Comparison</small><div class="money">v0.7 baseline → v0.8 candidate</div></div>
-    <button onclick="runLab()">Compare Strategies</button><button class="optimizer-btn" onclick="runOptimizer()">Run v0.9 Walk-Forward</button>
-    <div><small>v1.1 Monthly ranking universe</small><select id="monthlyRankLimit"><option value="10">10 stocks</option><option value="20" selected>20 stocks</option><option value="30">30 stocks</option><option value="50">50 stocks</option></select></div>
-    <button class="optimizer-btn" onclick="runMonthlyRanker()">Run v1.1 Ranking Test</button>
-    <div><small>v1.2 Frozen model</small><div class="money">20 stocks → Top 3 → rolling validation</div></div>
-    <button class="optimizer-btn" onclick="runRollingValidation()">Run v1.2 Rolling Validation</button>
-    <div><small>v1.3 Regime diagnostics</small><div class="money">Frozen v1.2 model → Bullish / Sideways / Bearish + volatility</div></div>
-    <button class="optimizer-btn" onclick="runRegimeValidation()">Run v1.3 Market Regime Test</button>
-    <div><small>v1.4 Regime-aware candidate</small><div class="money">Frozen v1.2 baseline → regime-aware Top 3 candidate</div></div>
-    <button class="optimizer-btn" onclick="runRegimeAwareValidation()">Run v1.4 Regime-Aware Test</button>
-    <div><small>v1.5 Sideways optimizer</small><div class="money">Frozen v1.2 → test 3 SIDEWAYS-only candidates</div></div>
-    <button class="optimizer-btn" onclick="runSidewaysOptimizer()">Run v1.5 Sideways Optimizer</button>
-    <div><small>v1.6 Frozen winner confirmation</small><div class="money">Trend + Low Vol → older holdout excluded from v1.5 selection</div></div>
-    <button class="optimizer-btn" onclick="runV16Confirmation()">Run v1.6 Holdout Confirmation</button>
-    <div><small>v1.7 Stress & robustness</small><div class="money">Frozen Trend + Low Vol → Top-N, weight, regime & time stability</div></div>
-    <button class="optimizer-btn" onclick="runV17Robustness()">Run v1.7 Stress Test</button>
-    <div><small>v1.8 Execution & cost validation</small><div class="money">Frozen Trend + Low Vol → turnover, costs, slippage & timing stress</div></div>
-    <button class="optimizer-btn" onclick="runV18Execution()">Run v1.8 Execution Test</button>
-    <div><small>v1.9 Realistic portfolio simulation</small><div class="money">₹100,000 → whole shares → monthly Top 3 → 25 bps costs</div></div>
-    <button class="optimizer-btn" onclick="runV19Portfolio()">Run v1.9 Portfolio Simulation</button>
-    <div><small>v2.0 Final stability validation</small><div class="money">Frozen model → final risk & production-readiness gate</div></div>
-    <button class="optimizer-btn" onclick="runV20Final()">Run v2.0 Final Validation</button>
-  </section>
 
   <div id="status" class="status">
     Choose your settings and start a scan.
@@ -241,24 +205,13 @@ function mode(m,b){
 
   const day=m==='day';
   const backtest=m==='backtest';
-  const lab=m==='lab';
 
-  document.getElementById('mainControls').classList.toggle('hide',backtest || lab);
+  document.getElementById('mainControls').classList.toggle('hide',backtest);
   document.getElementById('backtestControls').classList.toggle('hide',!backtest);
-  document.getElementById('labControls').classList.toggle('hide',!lab);
-  document.getElementById('riskbox').classList.toggle('hide',day || backtest || lab);
+  document.getElementById('riskbox').classList.toggle('hide',day || backtest);
   document.getElementById('riskpct').classList.toggle('hide',!day);
   document.getElementById('pricePanel').classList.toggle('hide',!day);
 
-  if(lab){
-    document.getElementById('eyebrow').textContent='STRATEGY RESEARCH LAB';
-    document.getElementById('headline').textContent='Research strategies with walk-forward validation.';
-    document.getElementById('copy').textContent='The v0.9 optimizer separates training, validation and unseen test periods so we can reject strategies that only look good on the data used to build them.';
-    document.getElementById('listlabel').textContent='OLD VS NEW';
-    document.getElementById('listtitle').textContent='Strategy Comparison';
-    document.getElementById('status').innerHTML='Run a comparison. A candidate is <b>not adopted automatically</b> just because it looks better in one historical sample.';
-    return;
-  }
 
   if(backtest){
     document.getElementById('eyebrow').textContent='MEASURED HISTORICAL PERFORMANCE';
