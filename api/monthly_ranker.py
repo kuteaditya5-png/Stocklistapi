@@ -402,3 +402,98 @@ def sideways_holdout_confirmation(symbols, period="10y", top_n=3):
     bsw=_metrics([r for r in base_rows if r["trend_regime"]=="SIDEWAYS"]); csw=_metrics([r for r in cand_rows if r["trend_regime"]=="SIDEWAYS"])
     passed=(csw["months"]>=6 and csw["avg_excess"]>0 and csw["beat_nifty"]>50 and mc["avg_excess"]>=mb["avg_excess"] and mc["max_drawdown"]<=mb["max_drawdown"]+2)
     return {"engine":"v1.6 Frozen Winner Holdout Confirmation","holdout_start":cand_rows[0]["date"],"holdout_end":cand_rows[-1]["date"],"selection_window_excluded_from":str(cutoff.date()),"baseline":mb,"candidate":mc,"baseline_sideways":bsw,"candidate_sideways":csw,"verdict":"PASS" if passed else "REJECT","frozen_candidate":"Trend + Low Vol","pass_rule":"At least 6 SIDEWAYS holdout months, positive SIDEWAYS excess, >50% SIDEWAYS NIFTY-beat rate, no reduction in overall average excess versus frozen v1.2, and drawdown no more than 2pp worse.","warning":"v1.6 uses older pre-selection history excluded from v1.5's 5-year optimization window. This is a genuine out-of-selection historical holdout, but it is backward-looking—not future live validation—and current-universe survivorship bias can remain."}
+
+
+def stress_robustness_validation(symbols, period="10y"):
+    """v1.7: stress the frozen v1.5 Trend + Low Vol rule without retuning it.
+    Tests Top-N sensitivity, small predefined weight perturbations, volatility/trend regimes,
+    and early-vs-late stability over the available long history.
+    """
+    raw=yf.download(symbols+["^NSEI"],period=period,interval="1d",auto_adjust=True,progress=False,threads=True,group_by="ticker")
+    fs={s:_frame(raw,s) for s in symbols+["^NSEI"]}; b=fs["^NSEI"]["Close"].copy()
+    b.index=pd.DatetimeIndex(b.index).tz_localize(None).normalize()
+    if len(b)<1500: raise ValueError("Not enough long history for v1.7 robustness validation")
+    bm=pd.DataFrame({"Close":b}); bm["R63"]=bm.Close.pct_change(63); bm["E200"]=bm.Close.ewm(span=200,adjust=False).mean()
+    bm["RET"]=bm.Close.pct_change(); bm["VOL20"]=bm.RET.rolling(20).std()
+    bm["VOL_Q70"]=bm.VOL20.rolling(252,min_periods=126).quantile(.70)
+    prep={}
+    for s in symbols:
+        x=fs[s].copy()
+        if len(x)<500: continue
+        x.index=pd.DatetimeIndex(x.index).tz_localize(None).normalize(); x["NIFTY"]=b.reindex(x.index).ffill()
+        x["R21"]=x.Close.pct_change(21); x["R63"]=x.Close.pct_change(63); x["R126"]=x.Close.pct_change(126)
+        x["RS21"]=x.R21-x.NIFTY.pct_change(21); x["RS63"]=x.R63-x.NIFTY.pct_change(63)
+        x["E50"]=x.Close.ewm(span=50,adjust=False).mean(); x["E200"]=x.Close.ewm(span=200,adjust=False).mean()
+        x["VOL"]=x.Close.pct_change().rolling(20).std(); x["D52"]=x.Close/x.Close.rolling(252).max()-1
+        x["VR"]=x.Volume/x.Volume.rolling(20).mean(); prep[s]=x
+    # Frozen winner plus small, PREDEFINED perturbations. These are diagnostics, not new candidates.
+    weight_sets={
+      "Frozen":(.22,.12,.08,.05,.23,.20,.07,.03),
+      "Trend -10%":(.23,.13,.08,.05,.207,.22,.073,.027),
+      "Trend +10%":(.21,.11,.08,.05,.253,.19,.067,.03),
+      "LowVol -10%":(.23,.12,.08,.05,.24,.18,.07,.03),
+      "LowVol +10%":(.21,.12,.08,.05,.22,.22,.07,.03),
+    }
+    rows={(name,n):[] for name in weight_sets for n in (2,3,4,5)}
+    dates=b.index[260:-22:21]
+    for dt in dates:
+        if dt not in bm.index: continue
+        br=bm.loc[dt]
+        if pd.isna(br.R63) or pd.isna(br.E200): continue
+        regime="BULLISH" if br.Close>br.E200 and br.R63>0.03 else ("BEARISH" if br.Close<br.E200 and br.R63<-0.03 else "SIDEWAYS")
+        highvol=bool(pd.notna(br.VOL_Q70) and br.VOL20>br.VOL_Q70)
+        q=[]
+        for s,x in prep.items():
+            h=x.loc[x.index<=dt]
+            if h.empty: continue
+            i=x.index.get_loc(h.index[-1])
+            if not isinstance(i,(int,np.integer)) or i+21>=len(x): continue
+            r=x.iloc[i]; f=x.iloc[i+21]
+            keys=["R21","R63","R126","RS21","RS63","E50","E200","VOL","D52","VR","NIFTY"]
+            if any(pd.isna(r[k]) for k in keys): continue
+            q.append(dict(symbol=s.replace(".NS",""),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),
+              r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),
+              vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
+        if len(q)<5: continue
+        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        feats=[_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr)]
+        base=.25*feats[0]+.15*feats[1]+.15*feats[2]+.10*feats[3]+.10*feats[4]+.10*feats[5]+.10*feats[6]+.05*feats[7]
+        nr=float((z.iloc[0].fnifty/z.iloc[0].nifty-1)*100)
+        for name,w in weight_sets.items():
+            score=sum(float(wi)*fi for wi,fi in zip(w,feats)) if regime=="SIDEWAYS" else base
+            for n in (2,3,4,5):
+                pick=z.assign(_score=score).nlargest(n,"_score")
+                pr=float(((pick.future/pick.price-1)*100).mean())
+                rows[(name,n)].append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),
+                    "nifty_return":round(nr,2),"excess":round(pr-nr,2),"trend_regime":regime,
+                    "vol_regime":"HIGH" if highvol else "NORMAL"})
+    frozen=rows[("Frozen",3)]
+    if len(frozen)<36: raise ValueError("Not enough monthly observations for v1.7")
+    overall=_metrics(frozen)
+    topn={str(n):_metrics(rows[("Frozen",n)]) for n in (2,3,4,5)}
+    perturb=[]
+    for name in weight_sets:
+        m=_metrics(rows[(name,3)])
+        sw=_metrics([r for r in rows[(name,3)] if r["trend_regime"]=="SIDEWAYS"])
+        perturb.append({"name":name,"overall":m,"sideways":sw})
+    regimes={}
+    for rg in ("BULLISH","SIDEWAYS","BEARISH"):
+        regimes[rg]=_metrics([r for r in frozen if r["trend_regime"]==rg])
+    vol={"NORMAL":_metrics([r for r in frozen if r["vol_regime"]=="NORMAL"]),
+         "HIGH":_metrics([r for r in frozen if r["vol_regime"]=="HIGH"])}
+    mid=len(frozen)//2
+    periods={"EARLY":_metrics(frozen[:mid]),"LATE":_metrics(frozen[mid:])}
+    # Robustness gate: frozen Top3 positive excess; Top2-5 average excess not negative;
+    # all perturbations retain positive overall excess; sideways frozen remains positive and >50% beat;
+    # both chronological halves retain positive excess.
+    passed=(overall["avg_excess"]>0
+        and all(v["avg_excess"]>=0 for v in topn.values())
+        and all(x["overall"]["avg_excess"]>0 for x in perturb)
+        and perturb[0]["sideways"]["avg_excess"]>0 and perturb[0]["sideways"]["beat_nifty"]>50
+        and periods["EARLY"]["avg_excess"]>0 and periods["LATE"]["avg_excess"]>0)
+    return {"engine":"v1.7 Stress & Robustness Validation","frozen_candidate":"Trend + Low Vol",
+      "months":len(frozen),"overall":overall,"top_n_sensitivity":topn,"weight_perturbations":perturb,
+      "trend_regimes":regimes,"volatility_regimes":vol,"chronological_stability":periods,
+      "verdict":"PASS" if passed else "REVIEW",
+      "pass_rule":"Frozen Top-3 must retain positive overall excess; Top-2/3/4/5 must not have negative average excess; all small predefined weight perturbations must retain positive overall excess; frozen SIDEWAYS performance must stay positive and beat NIFTY >50%; and both chronological halves must retain positive excess.",
+      "warning":"Stress test only. The v1.5 winner remains frozen; perturbations are sensitivity diagnostics, not retuning. Historical tests remain subject to survivorship/data-quality bias and are not a guarantee of future returns."}

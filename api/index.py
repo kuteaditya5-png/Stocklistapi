@@ -507,3 +507,9 @@ def portfolio(
 def research_v16_holdout_confirmation():
     from monthly_ranker import sideways_holdout_confirmation
     return sideways_holdout_confirmation(_representative_universe(20), period="10y", top_n=3)
+
+
+@app.get("/api/research/v17-stress-robustness")
+def research_v17_stress_robustness():
+    from monthly_ranker import stress_robustness_validation
+    return stress_robustness_validation(_representative_universe(20), period="10y")
