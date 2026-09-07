@@ -160,6 +160,8 @@
     <button class="optimizer-btn" onclick="runV16Confirmation()">Run v1.6 Holdout Confirmation</button>
     <div><small>v1.7 Stress & robustness</small><div class="money">Frozen Trend + Low Vol → Top-N, weight, regime & time stability</div></div>
     <button class="optimizer-btn" onclick="runV17Robustness()">Run v1.7 Stress Test</button>
+    <div><small>v1.8 Execution & cost validation</small><div class="money">Frozen Trend + Low Vol → turnover, costs, slippage & timing stress</div></div>
+    <button class="optimizer-btn" onclick="runV18Execution()">Run v1.8 Execution Test</button>
   </section>
 
   <div id="status" class="status">
@@ -697,6 +699,28 @@ async function runV17Robustness(){
    <div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div>
    <div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
  }catch(e){st.textContent='v1.7 robustness test failed: '+e.message}
+}
+
+
+async function runV18Execution(){
+ const st=document.getElementById('status'),cards=document.getElementById('cards');
+ st.innerHTML='<b>Running v1.8 execution & cost validation…</b>';cards.innerHTML='';
+ try{
+  const r=await fetch('/api/research/v18-execution-cost'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
+  const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REVIEW</span>';
+  const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;
+  const costs=d.cost_scenarios.map(x=>row(x.name+' · '+x.round_trip_bps+' bps',x.avg_excess+'% excess',x.beat_nifty+'% beat · '+x.max_drawdown+'% DD')).join('');
+  const timing=d.timing_sensitivity.map(x=>row(x.name,x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
+  st.innerHTML=`Tested <b>${d.months}</b> frozen monthly portfolios after execution friction. ${v}`;
+  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.8 EXECUTION & COST VALIDATION</b><span>Frozen v1.5 winner — no retuning</span></div>
+   <div class="compare-head"><span>Gross model</span><b>Performance</b><b>Implementation</b></div>
+   ${row('Frozen Top 3',d.gross.avg_excess+'% excess',d.gross.beat_nifty+'% beat · '+d.gross.max_drawdown+'% DD')}
+   ${row('Average monthly turnover',d.average_monthly_turnover_pct+'%','Top-3 portfolio')}
+   <div class="caveat"><b>Transaction cost + slippage scenarios</b>${costs}</div>
+   <div class="caveat"><b>Rebalance timing sensitivity</b>${timing}</div>
+   <div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div>
+   <div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
+ }catch(e){st.textContent='v1.8 execution test failed: '+e.message}
 }
 
 </script>
