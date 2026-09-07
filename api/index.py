@@ -524,3 +524,8 @@ def research_v18_execution_cost():
 def research_v19_portfolio_simulation(capital: float = 100000):
     from monthly_ranker import realistic_portfolio_simulation
     return realistic_portfolio_simulation(_representative_universe(20), period="10y", initial_capital=capital, cost_bps=25)
+
+@app.get("/api/research/v20-final-stability")
+def research_v20_final_stability(capital: float = 100000):
+    from monthly_ranker import final_stability_validation
+    return final_stability_validation(_representative_universe(20), period="10y", initial_capital=capital, cost_bps=25)
