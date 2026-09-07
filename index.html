@@ -156,6 +156,8 @@
     <button class="optimizer-btn" onclick="runRegimeAwareValidation()">Run v1.4 Regime-Aware Test</button>
     <div><small>v1.5 Sideways optimizer</small><div class="money">Frozen v1.2 → test 3 SIDEWAYS-only candidates</div></div>
     <button class="optimizer-btn" onclick="runSidewaysOptimizer()">Run v1.5 Sideways Optimizer</button>
+    <div><small>v1.6 Frozen winner confirmation</small><div class="money">Trend + Low Vol → older holdout excluded from v1.5 selection</div></div>
+    <button class="optimizer-btn" onclick="runV16Confirmation()">Run v1.6 Holdout Confirmation</button>
   </section>
 
   <div id="status" class="status">
@@ -653,6 +655,17 @@ async function runSidewaysOptimizer(){
  st.innerHTML=`Evaluated <b>${d.evaluation_months}</b> identical months. Best research candidate: <b>${d.best_candidate}</b> ${v}`;
  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.5 SIDEWAYS-MARKET OPTIMIZER</b><span>v1.2 remains frozen</span></div><div class="compare-head"><span>Candidate</span><b>SIDEWAYS result</b><b>Overall result</b></div>${rows}<div class="caveat"><b>Candidate rules</b><ul>${d.rules.map(x=>`<li>${x}</li>`).join('')}</ul></div><div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
  }catch(e){st.textContent='v1.5 sideways optimizer failed: '+e.message}
+}
+
+
+async function runV16Confirmation(){
+ const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.6 frozen-winner holdout confirmation…</b>';cards.innerHTML='';
+ try{const r=await fetch('/api/research/v16-holdout-confirmation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
+ const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';
+ const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;
+ st.innerHTML=`Frozen <b>${d.frozen_candidate}</b> tested on ${d.holdout_start} → ${d.holdout_end}. ${v}`;
+ cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.6 HOLDOUT CONFIRMATION</b><span>v1.5 winner frozen — no retuning</span></div><div class="compare-head"><span>Metric</span><b>v1.2 baseline</b><b>Frozen v1.5 winner</b></div>${row('Overall months',d.baseline.months,d.candidate.months)}${row('Overall average excess',d.baseline.avg_excess+'%',d.candidate.avg_excess+'%')}${row('Overall beat NIFTY',d.baseline.beat_nifty+'%',d.candidate.beat_nifty+'%')}${row('Max drawdown',d.baseline.max_drawdown+'%',d.candidate.max_drawdown+'%')}<div class="caveat"><b>SIDEWAYS holdout</b>${row('Sideways months',d.baseline_sideways.months,d.candidate_sideways.months)}${row('Sideways average excess',d.baseline_sideways.avg_excess+'%',d.candidate_sideways.avg_excess+'%')}${row('Sideways beat NIFTY',d.baseline_sideways.beat_nifty+'%',d.candidate_sideways.beat_nifty+'%')}</div><div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
+ }catch(e){st.textContent='v1.6 holdout confirmation failed: '+e.message}
 }
 
 updatePriceText();
