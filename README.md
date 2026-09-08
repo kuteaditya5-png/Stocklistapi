@@ -32,3 +32,7 @@ Expected health output includes:
 
 `index.html` and `static/style.css` may remain in the repository, but the Vercel root
 dashboard no longer depends on them.
+
+
+## v2.0.1 UI update
+Intraday cards now show estimated P&L, return on entered capital, and capital after Target 1, Target 2, and Stop Loss. Validated ranking/signal logic is unchanged.

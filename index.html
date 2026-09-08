@@ -293,7 +293,20 @@ async function run(){
         `<b>${d.top.length}</b> trade setup(s).`;
 
       document.getElementById('cards').innerHTML=d.top.length
-      ? d.top.map((x,i)=>`
+      ? d.top.map((x,i)=>{
+        const entry=Number(x.entry), qty=Number(x.quantity), capital=Number(x.capital);
+        const side=String(x.signal||'').toUpperCase();
+        const pnlAt=(price)=>{
+          const p=Number(price);
+          return (side==='SELL' ? (entry-p) : (p-entry))*qty;
+        };
+        const pnlPct=(price)=> capital ? (pnlAt(price)/capital)*100 : 0;
+        const capitalAt=(price)=>capital+pnlAt(price);
+        const pnlText=(price)=>{
+          const p=pnlAt(price);
+          return `${p>=0?'+':'-'}₹${Math.abs(p).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+        };
+        return `
         <article>
           <div class="top">
             <div>
@@ -305,10 +318,10 @@ async function run(){
           </div>
 
           <div class="forecast">
-            <div><small>Entry</small><b>₹${x.entry}</b></div>
-            <div><small>Stop Loss</small><b>₹${x.stop_loss}</b></div>
-            <div><small>Target 1</small><b>₹${x.target1}</b></div>
-            <div><small>Target 2</small><b>₹${x.target2}</b></div>
+            <div><small>Entry</small><b>₹${x.entry}</b><small>Capital ${fmt(capital)}</small></div>
+            <div><small>Stop Loss</small><b>₹${x.stop_loss}</b><small>${pnlText(x.stop_loss)} · ${pnlPct(x.stop_loss).toFixed(2)}%<br>Capital ${fmt(capitalAt(x.stop_loss))}</small></div>
+            <div><small>Target 1</small><b>₹${x.target1}</b><small>${pnlText(x.target1)} · +${Math.max(0,pnlPct(x.target1)).toFixed(2)}%<br>Capital ${fmt(capitalAt(x.target1))}</small></div>
+            <div><small>Target 2</small><b>₹${x.target2}</b><small>${pnlText(x.target2)} · +${Math.max(0,pnlPct(x.target2)).toFixed(2)}%<br>Capital ${fmt(capitalAt(x.target2))}</small></div>
           </div>
 
           <div class="afford">
@@ -338,7 +351,8 @@ async function run(){
             </div>
           </div>
         </article>
-      `).join('')
+        `;
+      }).join('')
       : `<div class="empty"><b>NO TRADE</b><br>No stock in your selected price range produced a strong enough setup.</div>`;
 
     }else{
