@@ -182,9 +182,9 @@ td{text-align:right;padding:9px 0;border-bottom:1px solid var(--rule)}
 
 <h1 class="lede" id="lede">This model beat the NIFTY in
   <span class="figure">49%</span> of backtested months.</h1>
-<p class="sub" id="sub">Which is to say: slightly worse than a coin toss on any given month. It ranks
-  all 50 NIFTY stocks on trend and volatility, and every range you see below is measured from what
-  those stocks actually did — not predicted.</p>
+<p class="sub" id="sub">Which is to say: slightly worse than a coin toss in any given month. It
+  ranks about 190 NSE stocks on trend and volatility and splits your money across a basket. Every
+  range below is measured from what those stocks actually did — not predicted.</p>
 
 <section id="filter" class="filter hide">
   <h2 id="priceText">Any affordable price</h2>
@@ -226,14 +226,15 @@ td{text-align:right;padding:9px 0;border-bottom:1px solid var(--rule)}
       <option>20</option>
     </select>
   </div>
-  <button class="run" id="go" onclick="run()">Rank the NIFTY 50</button>
+  <button class="run" id="go" onclick="run()">Build a basket</button>
 </section>
 
 <section id="backtestControls" class="controls hide">
   <div class="field">
     <label for="btEngine">Engine</label>
     <select id="btEngine" onchange="backtestEngineChanged()">
-      <option value="intraday" selected>Intraday, live rules</option>
+      <option value="strategy" selected>Monthly basket, after costs and tax</option>
+      <option value="intraday">Intraday, live rules</option>
       <option value="monthly">Monthly, technical proxy</option>
     </select>
   </div>
@@ -242,6 +243,28 @@ td{text-align:right;padding:9px 0;border-bottom:1px solid var(--rule)}
     <select id="btLimit">
       <option value="3" selected>3 stocks, faster</option>
       <option value="5">5 stocks</option>
+    </select>
+  </div>
+  <div class="field" id="btStrategyBox">
+    <label for="btHold">Rebalance</label>
+    <select id="btHold">
+      <option value="21" selected>Every month</option>
+      <option value="63">Every quarter</option>
+    </select>
+  </div>
+  <div class="field" id="btBasketBox">
+    <label for="btTopN">Basket</label>
+    <select id="btTopN">
+      <option value="3">3 stocks</option>
+      <option value="8" selected>8 stocks</option>
+      <option value="12">12 stocks</option>
+    </select>
+  </div>
+  <div class="field" id="btRegimeBox">
+    <label for="btRegime">Below the 200-day average</label>
+    <select id="btRegime">
+      <option value="false" selected>Stay invested</option>
+      <option value="true">Move to cash</option>
     </select>
   </div>
   <div class="field" id="btWindowBox">
@@ -326,18 +349,22 @@ function mode(m,btn){
     document.getElementById('status').textContent='Set your capital and risk, then scan.';
   }else{
     lede.innerHTML='This model beat the NIFTY in<span class="figure">49%</span> of backtested months.';
-    sub.textContent='Which is to say: slightly worse than a coin toss on any given month. It ranks all '+
-      '50 NIFTY stocks on trend and volatility, and every range you see below is measured from what '+
-      'those stocks actually did — not predicted.';
-    document.getElementById('go').textContent='Rank the NIFTY 50';
+    sub.textContent='Which is to say: slightly worse than a coin toss in any given month. It ranks '+
+      'about 190 NSE stocks on trend and volatility and splits your money across a basket. Every '+
+      'range below is measured from what those stocks actually did — not predicted.';
+    document.getElementById('go').textContent='Build a basket';
     document.getElementById('status').textContent='Set an amount, then rank.';
   }
 }
 
 function backtestEngineChanged(){
-  const monthly=document.getElementById('btEngine').value==='monthly';
-  document.getElementById('btWindowBox').classList.toggle('hide',monthly);
-  document.getElementById('btMonthlyBox').classList.toggle('hide',!monthly);
+  const e=document.getElementById('btEngine').value;
+  const strat=e==='strategy';
+  ['btStrategyBox','btBasketBox','btRegimeBox'].forEach(id=>
+    document.getElementById(id).classList.toggle('hide',!strat));
+  document.getElementById('btWindowBox').classList.toggle('hide',e!=='intraday');
+  document.getElementById('btMonthlyBox').classList.toggle('hide',e!=='monthly');
+  document.getElementById('btLimit').parentElement.classList.toggle('hide',strat);
 }
 
 /* Plots the measured spread of past 1-month returns against a zero line. */
@@ -380,7 +407,7 @@ async function run(){
 
   go.disabled=true;
   cards.innerHTML='';
-  st.textContent=current==='day'?'Scanning for intraday setups…':'Ranking all 50 stocks…';
+  st.textContent=current==='day'?'Scanning for intraday setups…':'Ranking the universe…';
 
   try{
     let url;
@@ -389,7 +416,7 @@ async function run(){
         `&limit_universe=${document.getElementById('limit').value}`+
         `&min_price=${+document.getElementById('minPrice').value}&max_price=${effectiveMax()}`;
     }else{
-      url=`/api/portfolio?amount=${amount}`;
+      url=`/api/portfolio?amount=${amount}&universe=nifty200&top_n=8`;
     }
 
     const r=await fetch(url),d=await r.json();
@@ -404,10 +431,20 @@ async function run(){
 }
 
 function renderRanking(d,amount){
+  const b=d.basket;
   document.getElementById('regime').innerHTML=`NIFTY trend <b>${esc(d.market_regime.toLowerCase())}</b>`;
-  document.getElementById('status').innerHTML=
-    `Ranked <b>${d.ranked}</b> of ${d.universe_size} stocks with the frozen model. `+
-    `Trend regime is <b>${esc(d.market_regime.toLowerCase())}</b>, which sets the weighting.`;
+
+  if(d.hold_cash){
+    document.getElementById('status').innerHTML=
+      `<b>The rule says hold cash this month.</b> The NIFTY is below its 200-day average, `+
+      `which is where this strategy has historically done worst. The ranking is below if `+
+      `you want to see it anyway.`;
+  }else{
+    document.getElementById('status').innerHTML=
+      `Ranked <b>${d.ranked}</b> of ${d.universe_size} stocks. Buying <b>${b.names}</b> `+
+      `${b.names===1?'name':'names'} with ${fmt(b.capital_deployed)}, leaving `+
+      `${fmt(b.cash_left)} uninvested.`+(b.narrowed_for_budget?`<br>${esc(b.note)}`:'');
+  }
 
   document.getElementById('cards').innerHTML=d.top.length?d.top.map((x,i)=>{
     const a=x.affordability,v=x.historical_value_band,s=x.signals;
@@ -418,11 +455,11 @@ function renderRanking(d,amount){
           <h3 class="name">${esc(x.symbol)}</h3>
           <div class="score">${Number(x.model_score).toFixed(1)}<i> of 100</i></div>
         </div>
-        <p class="line">${fmt(a.share_price)} a share · ${a.affordable_qty} whole shares fit
-          ${fmt(amount)}, leaving ${fmt(a.cash_left)}</p>
+        <p class="line">${fmt(a.share_price)} a share · ${a.shares} shares for
+          ${fmt(a.capital_deployed)}${a.unfunded?' · below your per-name budget, not funded':''}</p>
         ${strip(x.historical_1m_range)}
         <div class="rows">
-          ${v?row('Your '+fmt(a.capital_deployed)+' in a middle month',
+          ${v?row('This '+fmt(a.capital_deployed)+' in a middle month',
                   fmt(v.low)+' to '+fmt(v.high)):''}
           ${v?row('In the worst 1 month in 20',fmt(v.worst_5pct)):''}
           ${row('Three-month return, against the index',s.relative_strength_3m_pct+'%')}
@@ -496,6 +533,67 @@ function table(title,rows,monthly){
     <tbody>${body}</tbody></table></div></div>`;
 }
 
+async function runStrategyTest(){
+  const st=document.getElementById('status'),cards=document.getElementById('cards');
+  const hold=document.getElementById('btHold').value;
+  const topN=document.getElementById('btTopN').value;
+  const regime=document.getElementById('btRegime').value;
+
+  st.textContent='Simulating whole-share trades across ten years, charging costs and tax on '+
+    'every rebalance. This takes a minute.';
+
+  try{
+    const r=await fetch(`/api/backtest/strategy?top_n=${topN}&hold_days=${hold}`+
+      `&regime_filter=${regime}&universe=nifty200&period=10y`);
+    const d=await r.json();
+    if(!r.ok) throw Error(d.detail||'The test did not complete');
+
+    const c=d.config,verdict=d.significant
+      ?'This edge clears the usual bar for statistical significance.'
+      :'This edge does not clear the usual bar. At this sample size it is not '+
+       'distinguishable from luck.';
+
+    st.innerHTML=`Simulated <b>${d.periods_evaluated}</b> rebalances over ${d.years} years `+
+      `across ${c.symbols_with_history} stocks.`;
+
+    cards.innerHTML=`<article class="entry"><div class="rank">↳</div><div>
+      <div class="head"><h3 class="name">${c.top_n} stocks, every
+        ${c.hold_days===21?'month':c.hold_days===63?'quarter':c.hold_days+' days'}</h3></div>
+      <p class="line">${c.regime_filter?'Moves to cash below the 200-day average. ':''}Whole
+        shares from ${fmt(c.starting_capital)}, costs and tax charged on every trade.</p>
+      <div class="rows metrics">
+        ${row('Ended with',fmt(d.final_capital))}
+        ${row('NIFTY over the same period',fmt(d.benchmark_final_capital))}
+        ${row('Annual return',d.cagr_pct+'%')}
+        ${row('NIFTY annual return',d.benchmark_cagr_pct+'%')}
+        ${row('Rebalances that beat the index',d.beat_benchmark_pct+'%')}
+        ${row('Average gain over the index',d.avg_excess_pct+'% per rebalance')}
+        ${row('Is that real or luck',
+              't = '+d.excess_t_stat+(d.significant?', real':', luck is not ruled out'))}
+        ${row('Deepest fall',d.max_drawdown_pct+'%')}
+        ${row('Paid in costs',fmt(d.total_costs_paid))}
+        ${row('Paid in tax',fmt(d.total_tax_paid))}
+        ${row('Costs and tax, per year',d.cost_and_tax_drag_pct_per_year+'% of the portfolio')}
+        ${c.regime_filter?row('Rebalances spent in cash',d.periods_in_cash):''}
+      </div>
+      <div class="caveat"><h3>How to read this</h3>
+        <p>${verdict}</p>
+        <p>${esc(d.reading)}</p>
+      </div>
+      <div class="caveat"><h3>What it still does not model</h3>
+        <ul>
+          <li>The stock list is today's index. Names that fell out are missing, which
+            flatters every result here.</li>
+          <li>Fills are assumed at the closing price plus slippage.</li>
+          <li>Dividends are in the price series but dividend tax is not charged.</li>
+        </ul>
+      </div>
+    </div></article>`;
+  }catch(e){
+    st.textContent='The test did not complete: '+e.message;
+  }
+}
+
 async function runBacktest(){
   const engine=document.getElementById('btEngine').value;
   const limit=document.getElementById('btLimit').value;
@@ -505,6 +603,8 @@ async function runBacktest(){
   cards.innerHTML='';
 
   try{
+    if(engine==='strategy'){ await runStrategyTest(); return; }
+
     const url=engine==='intraday'
       ?`/api/backtest/intraday?limit_universe=${limit}&period=`+
         `${document.getElementById('btWindow').value}&max_hold_bars=12`
