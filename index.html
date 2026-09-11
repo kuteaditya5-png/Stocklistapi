@@ -1,249 +1,337 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockLens AI v2.0 Stable</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>StockLens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EEF0EA;
+  --ink:#1B2A2E;
+  --rule:#C9CFC6;
+  --band:#2E6F6B;
+  --loss:#8A3A2E;
+  --quiet:#6E7A74;
+  --panel:#F7F8F5;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font:400 16px/1.55 "IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  font-variant-numeric:tabular-nums;
+}
+.sheet{max-width:860px;margin:0 auto;padding:0 22px 96px}
+
+/* masthead */
+.masthead{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  padding:26px 0 14px;border-bottom:1px solid var(--ink)}
+.wordmark{font:500 25px/1 "Newsreader",Georgia,serif;letter-spacing:-.01em}
+.regime{font-size:13px;color:var(--quiet)}
+.regime b{color:var(--ink);font-weight:500}
+
+/* tabs */
+nav{display:flex;gap:26px;border-bottom:1px solid var(--rule);margin-bottom:34px}
+nav button{
+  appearance:none;background:none;border:0;padding:13px 0;margin-bottom:-1px;
+  font:500 15px/1 "IBM Plex Sans",sans-serif;color:var(--quiet);
+  border-bottom:2px solid transparent;cursor:pointer
+}
+nav button:hover{color:var(--ink)}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--band)}
+
+/* hero */
+.lede{font:400 29px/1.32 "Newsreader",Georgia,serif;max-width:19ch;margin:0 0 14px}
+.lede .figure{font-size:62px;line-height:.9;display:block;margin:6px 0 2px;letter-spacing:-.02em}
+.sub{color:var(--quiet);max-width:62ch;margin:0 0 30px;font-size:15px}
+.sub a{color:var(--band)}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;
+  padding:20px 0 24px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field label{font-size:13px;color:var(--quiet)}
+.field .input,.field select{
+  height:44px;background:var(--panel);border:1px solid var(--rule);border-radius:2px;
+  color:var(--ink);padding:0 12px;font:400 16px/1 "IBM Plex Sans",sans-serif;
+  font-variant-numeric:tabular-nums
+}
+.field .input{display:flex;align-items:center;gap:5px;min-width:150px}
+.field .input input{width:100%;min-width:0;background:none;border:0;outline:0;color:inherit;
+  font:inherit;font-variant-numeric:tabular-nums}
+.field select{min-width:132px}
+.run{
+  height:44px;padding:0 22px;border:1px solid var(--ink);border-radius:2px;
+  background:var(--ink);color:var(--paper);cursor:pointer;
+  font:500 15px/1 "IBM Plex Sans",sans-serif
+}
+.run:hover{background:var(--band);border-color:var(--band)}
+.run[disabled]{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--band);outline-offset:2px}
+
+/* price filter */
+.filter{padding:20px 0;border-bottom:1px solid var(--rule)}
+.filter h2{font:500 17px/1.3 "IBM Plex Sans",sans-serif;margin:0 0 4px}
+.filter p{margin:0 0 16px;font-size:14px;color:var(--quiet)}
+.slider{position:relative;height:36px}
+.slider:before{content:"";position:absolute;left:0;right:0;top:17px;height:2px;background:var(--rule)}
+.slider input{position:absolute;left:0;top:3px;width:100%;height:30px;margin:0;background:none;
+  pointer-events:none;-webkit-appearance:none;appearance:none}
+.slider input::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+  background:var(--band);border:2px solid var(--paper);pointer-events:auto;cursor:pointer}
+.slider input::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--band);
+  border:2px solid var(--paper);pointer-events:auto;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.chips button{height:32px;padding:0 12px;background:none;border:1px solid var(--rule);border-radius:2px;
+  color:var(--quiet);font:400 14px/1 "IBM Plex Sans",sans-serif;cursor:pointer}
+.chips button:hover{border-color:var(--band);color:var(--band)}
+
+/* status */
+.status{padding:22px 0;font-size:14px;color:var(--quiet)}
+.status b{color:var(--ink);font-weight:500}
+
+/* ledger entries */
+.entry{display:grid;grid-template-columns:52px 1fr;gap:0 18px;
+  padding:26px 0;border-top:1px solid var(--rule)}
+.rank{font:400 34px/1 "Newsreader",Georgia,serif;color:var(--band)}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+.name{font:500 21px/1.2 "IBM Plex Sans",sans-serif;margin:0}
+.score{font:400 27px/1 "Newsreader",Georgia,serif;white-space:nowrap}
+.score i{font-style:normal;font-size:13px;color:var(--quiet);font-family:"IBM Plex Sans",sans-serif}
+.line{margin:5px 0 0;font-size:14px;color:var(--quiet)}
+.signal{font:500 14px/1 "IBM Plex Sans",sans-serif;padding:5px 9px;border-radius:2px;
+  border:1px solid currentColor}
+.buy{color:var(--band)}
+.sell{color:var(--loss)}
+
+/* distribution strip — the one loud element */
+.dist{margin:22px 0 6px}
+.dist-cap{font-size:13px;color:var(--quiet);margin-bottom:14px}
+.track{position:relative;height:30px}
+.track:before{content:"";position:absolute;left:0;right:0;top:14px;height:1px;background:var(--rule)}
+.whisker{position:absolute;top:14px;height:1px;background:var(--loss)}
+.range{position:absolute;top:8px;height:13px;background:var(--band);opacity:.22}
+.median{position:absolute;top:4px;width:2px;height:21px;background:var(--band)}
+.zero{position:absolute;top:0;width:1px;height:30px;background:var(--ink)}
+.zero:after{content:"0";position:absolute;top:30px;left:-3px;font-size:11px;color:var(--ink)}
+.ticks{position:relative;height:20px;margin-top:6px;font-size:12px;color:var(--quiet)}
+.ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.dist-note{font-size:13px;color:var(--quiet);margin-top:10px}
+
+/* data rows */
+.rows{margin-top:20px;border-top:1px solid var(--rule)}
+.row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;
+  border-bottom:1px solid var(--rule);font-size:14px}
+.row span{color:var(--quiet)}
+.row b{font-weight:500}
+.why{margin-top:18px;font-size:14px;color:var(--quiet)}
+.why ul{margin:6px 0 0;padding-left:18px}
+.why li{margin:3px 0}
+.why strong{color:var(--ink);font-weight:500}
+
+/* backtest */
+.metrics{border-top:1px solid var(--rule)}
+.caveat{margin-top:26px;padding-top:18px;border-top:1px solid var(--rule);
+  font-size:14px;color:var(--quiet);max-width:68ch}
+.caveat h3{font:500 15px/1.3 "IBM Plex Sans",sans-serif;color:var(--ink);margin:0 0 8px}
+.caveat ul{margin:0;padding-left:18px}
+.caveat li{margin:4px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+th{text-align:right;font-weight:500;color:var(--quiet);padding:8px 0;
+  border-bottom:1px solid var(--ink);font-size:13px}
+th:first-child,td:first-child{text-align:left}
+td{text-align:right;padding:9px 0;border-bottom:1px solid var(--rule)}
+.scroll{overflow-x:auto}
+
+.empty{padding:40px 0;border-top:1px solid var(--rule);color:var(--quiet);max-width:56ch}
+.empty b{display:block;color:var(--ink);font-weight:500;font-size:17px;margin-bottom:5px}
+.foot{margin-top:52px;padding-top:18px;border-top:1px solid var(--ink);
+  font-size:13px;color:var(--quiet);max-width:66ch}
+.hide{display:none!important}
+
+@media (max-width:620px){
+  .sheet{padding:0 16px 72px}
+  .lede{font-size:25px}
+  .lede .figure{font-size:52px}
+  .entry{grid-template-columns:1fr;gap:0}
+  .rank{font-size:20px;margin-bottom:2px}
+  .controls{gap:12px}
+  .field,.field .input,.field select{width:100%}
+  .run{width:100%}
+  .head{flex-direction:column;gap:2px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
 </head>
 <body>
-<header>
-  <div>
-    <b>StockLens <span>AI</span></b>
-    <small>Analyze. Rank. Trade Smarter.</small>
+<div class="sheet">
+
+<div class="masthead">
+  <div class="wordmark">StockLens</div>
+  <div class="regime" id="regime">Frozen model, v2.1</div>
+</div>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" onclick="mode('invest',this)">Monthly ranking</button>
+  <button role="tab" aria-selected="false" onclick="mode('day',this)">Intraday</button>
+  <button role="tab" aria-selected="false" onclick="mode('backtest',this)">What it measured</button>
+</nav>
+
+<h1 class="lede" id="lede">This model beat the NIFTY in
+  <span class="figure">49%</span> of backtested months.</h1>
+<p class="sub" id="sub">Which is to say: slightly worse than a coin toss on any given month. It ranks
+  all 50 NIFTY stocks on trend and volatility, and every range you see below is measured from what
+  those stocks actually did — not predicted.</p>
+
+<section id="filter" class="filter hide">
+  <h2 id="priceText">Any affordable price</h2>
+  <p>Applies to intraday scans only.</p>
+  <div class="slider">
+    <input id="minPrice" type="range" min="0" max="5000" step="50" value="0"
+      aria-label="Minimum share price" oninput="priceChanged('min')">
+    <input id="maxPrice" type="range" min="0" max="5000" step="50" value="5000"
+      aria-label="Maximum share price" oninput="priceChanged('max')">
   </div>
-  <i>● v2.0 STABLE · Frozen validated model</i>
-</header>
-
-<main>
-  <div class="tabs">
-    <button class="tab active" onclick="mode('invest',this)">📈 1-Month Investing</button>
-    <button class="tab" onclick="mode('day',this)">⚡ Intraday Trading</button>
-    <button class="tab" onclick="mode('backtest',this)">📊 Accuracy & Backtest</button>
+  <div class="chips">
+    <button onclick="preset(0,5000)">Any price</button>
+    <button onclick="preset(0,200)">Under ₹200</button>
+    <button onclick="preset(0,500)">Under ₹500</button>
+    <button onclick="preset(500,1000)">₹500 to ₹1,000</button>
+    <button onclick="preset(1000,2500)">₹1,000 to ₹2,500</button>
   </div>
+</section>
 
-  <section class="hero">
-    <label id="eyebrow">1-MONTH INVESTMENT FINDER</label>
-    <h1 id="headline">Find strong 1-month stock candidates.</h1>
-    <p id="copy">
-      Enter your investment amount and StockLens will rank the strongest 1-month candidates.
-    </p>
-  </section>
-
-  <section id="pricePanel" class="price-panel hide">
-    <div class="price-head">
-      <div>
-        <small>INTRADAY STOCK PRICE FILTER</small>
-        <h3 id="priceText">Any affordable price</h3>
-      </div>
-      <div class="price-note">This filter applies only to Intraday Trading.</div>
-    </div>
-
-    <div class="dual-slider">
-      <input id="minPrice" type="range" min="0" max="5000" step="50" value="0" oninput="priceChanged('min')">
-      <input id="maxPrice" type="range" min="0" max="5000" step="50" value="5000" oninput="priceChanged('max')">
-    </div>
-
-    <div class="range-labels">
-      <span>₹0</span>
-      <span>₹5,000+</span>
-    </div>
-
-    <div class="chips">
-      <button onclick="preset(0,5000)">Any Affordable</button>
-      <button onclick="preset(0,200)">Under ₹200</button>
-      <button onclick="preset(0,500)">Under ₹500</button>
-      <button onclick="preset(500,1000)">₹500–₹1,000</button>
-      <button onclick="preset(1000,2500)">₹1,000–₹2,500</button>
-    </div>
-  </section>
-
-  <section id="mainControls" class="controls">
-    <div>
-      <small>Capital / investment amount</small>
-      <div class="money">₹ <input id="amount" type="number" value="5000" min="1000"></div>
-    </div>
-
-    <div id="riskbox">
-      <small>Risk profile</small>
-      <select id="risk">
-        <option>low</option>
-        <option selected>moderate</option>
-        <option>high</option>
-      </select>
-    </div>
-
-    <div id="riskpct" class="hide">
-      <small>Risk per trade</small>
-      <select id="rp">
-        <option value=".5">0.5%</option>
-        <option value="1" selected>1%</option>
-        <option value="1.5">1.5%</option>
-        <option value="2">2%</option>
-      </select>
-    </div>
-
-    <div>
-      <small>Stocks to analyze</small>
-      <select id="limit">
-        <option>5</option>
-        <option selected>10</option>
-        <option>20</option>
-      </select>
-    </div>
-
-    <button id="go" onclick="run()">Find Best Stocks</button>
-  </section>
-
-  <section id="backtestControls" class="controls backtest-controls hide">
-    <div>
-      <small>Engine to test</small>
-      <select id="btEngine" onchange="backtestEngineChanged()">
-        <option value="intraday" selected>Intraday — same live rules</option>
-        <option value="monthly">1-Month — technical proxy</option>
-      </select>
-    </div>
-
-    <div>
-      <small>Representative stocks</small>
-      <select id="btLimit">
-        <option value="3" selected>3 — Fast</option>
-        <option value="5">5 — Better sample</option>
-      </select>
-    </div>
-
-    <div id="btWindowBox">
-      <small>Historical window</small>
-      <select id="btWindow">
-        <option value="5d">5 trading days</option>
-        <option value="1mo" selected>About 1 month</option>
-      </select>
-    </div>
-
-    <div id="btMonthlyBox" class="hide">
-      <small>1-month history</small>
-      <select id="btMonthlyPeriod">
-        <option value="1y">1 year</option>
-        <option value="2y" selected>2 years</option>
-      </select>
-    </div>
-
-    <button onclick="runBacktest()">Run Backtest</button>
-  </section>
-
-
-  <div id="status" class="status">
-    Choose your settings and start a scan.
+<section id="mainControls" class="controls">
+  <div class="field">
+    <label for="amount">Amount to invest</label>
+    <div class="input">₹<input id="amount" type="number" value="5000" min="1000" step="500"></div>
   </div>
+  <div class="field hide" id="riskpct">
+    <label for="rp">Risk per trade</label>
+    <select id="rp">
+      <option value=".5">0.5% of capital</option>
+      <option value="1" selected>1% of capital</option>
+      <option value="1.5">1.5% of capital</option>
+      <option value="2">2% of capital</option>
+    </select>
+  </div>
+  <div class="field hide" id="limitbox">
+    <label for="limit">Stocks to scan</label>
+    <select id="limit">
+      <option>5</option>
+      <option selected>10</option>
+      <option>20</option>
+    </select>
+  </div>
+  <button class="run" id="go" onclick="run()">Rank the NIFTY 50</button>
+</section>
 
-  <section>
-    <div class="title">
-      <div>
-        <label id="listlabel">1-MONTH SHORTLIST</label>
-        <h2 id="listtitle">Top 3 Candidates</h2>
-      </div>
-      <small id="updated"></small>
-    </div>
-    <div id="cards"></div>
-  </section>
+<section id="backtestControls" class="controls hide">
+  <div class="field">
+    <label for="btEngine">Engine</label>
+    <select id="btEngine" onchange="backtestEngineChanged()">
+      <option value="intraday" selected>Intraday, live rules</option>
+      <option value="monthly">Monthly, technical proxy</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="btLimit">Sample size</label>
+    <select id="btLimit">
+      <option value="3" selected>3 stocks, faster</option>
+      <option value="5">5 stocks</option>
+    </select>
+  </div>
+  <div class="field" id="btWindowBox">
+    <label for="btWindow">Window</label>
+    <select id="btWindow">
+      <option value="5d">Last 5 trading days</option>
+      <option value="1mo" selected>Last month</option>
+    </select>
+  </div>
+  <div class="field hide" id="btMonthlyBox">
+    <label for="btMonthlyPeriod">History</label>
+    <select id="btMonthlyPeriod">
+      <option value="1y">1 year</option>
+      <option value="2y" selected>2 years</option>
+    </select>
+  </div>
+  <button class="run" onclick="runBacktest()">Run the test</button>
+</section>
 
-  <p class="foot">
-    Forecasts, signals and historical tests are research outputs, not guaranteed returns or investment advice.
-  </p>
-</main>
+<div class="status" id="status">Set an amount, then rank.</div>
+<div id="cards"></div>
+
+<p class="foot">Rankings and historical ranges are research output. They are not advice, and nothing
+  here accounts for brokerage, slippage or capital-gains tax.</p>
+</div>
 
 <script>
 let current='invest';
 
-const fmt=n=>new Intl.NumberFormat(
-  'en-IN',
-  {style:'currency',currency:'INR',maximumFractionDigits:0}
-).format(n);
+const fmt=n=>new Intl.NumberFormat('en-IN',
+  {style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 function effectiveMax(){
   const v=+document.getElementById('maxPrice').value;
-  return v>=5000 ? 0 : v;
+  return v>=5000?0:v;
 }
-
 function priceChanged(which){
-  const minEl=document.getElementById('minPrice');
-  const maxEl=document.getElementById('maxPrice');
-  let lo=+minEl.value, hi=+maxEl.value;
-
-  if(lo>hi){
-    if(which==='min') maxEl.value=lo;
-    else minEl.value=hi;
-  }
-  
+  const lo=document.getElementById('minPrice'),hi=document.getElementById('maxPrice');
+  if(+lo.value>+hi.value){ which==='min' ? hi.value=lo.value : lo.value=hi.value; }
   updatePriceText();
 }
-
 function preset(lo,hi){
   document.getElementById('minPrice').value=lo;
   document.getElementById('maxPrice').value=hi;
   updatePriceText();
 }
-
 function updatePriceText(){
-  const lo=+document.getElementById('minPrice').value;
-  const hi=+document.getElementById('maxPrice').value;
-  let text='';
-
-  if(lo===0 && hi>=5000) text='Any affordable price';
-  else if(lo===0) text=`Up to ${fmt(hi)}`;
-  else if(hi>=5000) text=`${fmt(lo)} and above`;
-  else text=`${fmt(lo)} – ${fmt(hi)}`;
-
-  document.getElementById('priceText').textContent=text;
+  const lo=+document.getElementById('minPrice').value,hi=+document.getElementById('maxPrice').value;
+  let t='Any affordable price';
+  if(lo===0&&hi<5000) t=`Up to ${fmt(hi)} a share`;
+  else if(lo>0&&hi>=5000) t=`${fmt(lo)} a share and above`;
+  else if(lo>0) t=`${fmt(lo)} to ${fmt(hi)} a share`;
+  document.getElementById('priceText').textContent=t;
 }
 
-function mode(m,b){
+function mode(m,btn){
   current=m;
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.setAttribute('aria-selected','false'));
+  btn.setAttribute('aria-selected','true');
   document.getElementById('cards').innerHTML='';
 
-  const day=m==='day';
-  const backtest=m==='backtest';
-
-  document.getElementById('mainControls').classList.toggle('hide',backtest);
-  document.getElementById('backtestControls').classList.toggle('hide',!backtest);
-  document.getElementById('riskbox').classList.toggle('hide',day || backtest);
+  const day=m==='day',bt=m==='backtest';
+  document.getElementById('mainControls').classList.toggle('hide',bt);
+  document.getElementById('backtestControls').classList.toggle('hide',!bt);
+  document.getElementById('filter').classList.toggle('hide',!day);
   document.getElementById('riskpct').classList.toggle('hide',!day);
-  document.getElementById('pricePanel').classList.toggle('hide',!day);
+  document.getElementById('limitbox').classList.toggle('hide',!day);
 
-
-  if(backtest){
-    document.getElementById('eyebrow').textContent='MEASURED HISTORICAL PERFORMANCE';
-    document.getElementById('headline').textContent='Test the model instead of guessing its accuracy.';
-    document.getElementById('copy').textContent='Run historical tests and measure hit rate, expectancy, profit factor and NIFTY-relative performance. Intraday uses the same live rule set; the 1-month test is clearly marked as a technical-only proxy.';
-    document.getElementById('listlabel').textContent='BACKTEST RESULTS';
-    document.getElementById('listtitle').textContent='Model Performance';
-    document.getElementById('status').innerHTML='<b>No accuracy percentage is assumed.</b> Run a backtest to calculate results from historical data.';
-    return;
+  const lede=document.getElementById('lede'),sub=document.getElementById('sub');
+  if(bt){
+    lede.innerHTML='Nothing here is assumed.<span class="figure">Run it.</span>';
+    sub.textContent='Every number on this tab is computed from historical bars when you press the '+
+      'button. The intraday test replays the exact live rules. The monthly test is a technical proxy '+
+      'and is labelled as one.';
+    document.getElementById('status').textContent='Pick an engine and run the test.';
+  }else if(day){
+    lede.innerHTML='Setups that fit<span class="figure">your capital.</span>';
+    sub.textContent='Scans for entries against VWAP, EMA, RSI and volume, then sizes the position so a '+
+      'stop-out costs you the percentage you chose. A score is not a probability of profit.';
+    document.getElementById('go').textContent='Scan for setups';
+    document.getElementById('status').textContent='Set your capital and risk, then scan.';
+  }else{
+    lede.innerHTML='This model beat the NIFTY in<span class="figure">49%</span> of backtested months.';
+    sub.textContent='Which is to say: slightly worse than a coin toss on any given month. It ranks all '+
+      '50 NIFTY stocks on trend and volatility, and every range you see below is measured from what '+
+      'those stocks actually did — not predicted.';
+    document.getElementById('go').textContent='Rank the NIFTY 50';
+    document.getElementById('status').textContent='Set an amount, then rank.';
   }
-
-  document.getElementById('eyebrow').textContent=
-    day?'LIVE INTRADAY FINDER':'1-MONTH INVESTMENT FINDER';
-
-  document.getElementById('headline').textContent=
-    day?'Find intraday setups inside your price range.':'Find strong 1-month stock candidates.';
-
-  document.getElementById('copy').textContent=
-    day
-    ?'Filter stocks by price, then scan for BUY, SELL or NO TRADE using VWAP, EMA, RSI, volume and breakouts.'
-    :'Enter your investment amount and StockLens will rank the strongest candidates for the next month.';
-
-  document.getElementById('go').textContent=
-    day?'Scan Intraday Setups':'Find Best Stocks';
-
-  document.getElementById('listlabel').textContent=
-    day?'INTRADAY SHORTLIST':'1-MONTH SHORTLIST';
-
-  document.getElementById('listtitle').textContent=
-    day?'Top Affordable Trade Setups':'Top 3 Candidates';
-
-  document.getElementById('status').textContent='Choose your settings and start a scan.';
 }
 
 function backtestEngineChanged(){
@@ -252,450 +340,230 @@ function backtestEngineChanged(){
   document.getElementById('btMonthlyBox').classList.toggle('hide',!monthly);
 }
 
+/* Plots the measured spread of past 1-month returns against a zero line. */
+function strip(h){
+  if(!h) return '<p class="dist-note">Not enough history to plot a range.</p>';
+  const lo=Math.min(h.p05,0),hi=Math.max(h.p80,0),pad=(hi-lo)*0.12||1;
+  const a=lo-pad,b=hi+pad,x=v=>((v-a)/(b-a))*100;
+  return `<div class="dist">
+    <div class="dist-cap">Where this stock finished after a month, across ${h.samples} past
+      one-month windows</div>
+    <div class="track">
+      <div class="whisker" style="left:${x(h.p05)}%;width:${x(h.p20)-x(h.p05)}%"></div>
+      <div class="range" style="left:${x(h.p20)}%;width:${x(h.p80)-x(h.p20)}%"></div>
+      <div class="median" style="left:${x(h.median)}%"></div>
+      <div class="zero" style="left:${x(0)}%"></div>
+    </div>
+    <div class="ticks">
+      <span style="left:${x(h.p05)}%">${h.p05}%</span>
+      <span style="left:${x(h.median)}%">${h.median}%</span>
+      <span style="left:${x(h.p80)}%">${h.p80}%</span>
+    </div>
+    <p class="dist-note">Middle band holds 3 in 5 of those months. It closed higher in
+      ${h.positive_rate}% of them.</p>
+  </div>`;
+}
+
+function row(label,value){
+  return `<div class="row"><span>${label}</span><b>${value}</b></div>`;
+}
+
 async function run(){
   const amount=+document.getElementById('amount').value;
-  const limit=document.getElementById('limit').value;
-  const minPrice=+document.getElementById('minPrice').value;
-  const maxPrice=effectiveMax();
-  const st=document.getElementById('status');
+  const st=document.getElementById('status'),cards=document.getElementById('cards');
+  const go=document.getElementById('go');
 
-  if(amount<1000){
-    alert('Enter at least ₹1,000');
+  if(current!=='day'&&amount<1000){
+    st.textContent='Enter at least ₹1,000 so whole shares are affordable.';
     return;
   }
 
-  st.textContent=current==='day'
-    ?'Searching the NIFTY 50 for intraday setups inside your price range…'
-    :'Analyzing stocks for the 1-month ranking…';
-
-  document.getElementById('cards').innerHTML='';
+  go.disabled=true;
+  cards.innerHTML='';
+  st.textContent=current==='day'?'Scanning for intraday setups…':'Ranking all 50 stocks…';
 
   try{
     let url;
-
     if(current==='day'){
-      url=`/api/intraday?capital=${amount}&risk_pct=${document.getElementById('rp').value}&limit_universe=${limit}&min_price=${minPrice}&max_price=${maxPrice}`;
+      url=`/api/intraday?capital=${amount}&risk_pct=${document.getElementById('rp').value}`+
+        `&limit_universe=${document.getElementById('limit').value}`+
+        `&min_price=${+document.getElementById('minPrice').value}&max_price=${effectiveMax()}`;
     }else{
-      url=`/api/portfolio?amount=${amount}&risk=${document.getElementById('risk').value}&limit_universe=${limit}`;
+      url=`/api/portfolio?amount=${amount}`;
     }
 
-    const r=await fetch(url);
-    const d=await r.json();
-    if(!r.ok) throw Error(d.detail||'Scan failed');
+    const r=await fetch(url),d=await r.json();
+    if(!r.ok) throw Error(d.detail||'The scan did not complete');
 
-    document.getElementById('updated').textContent=
-      'Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-
-    if(current==='day'){
-      st.innerHTML=
-        `Analyzed <b>${d.analysed}</b> matching candidate(s) · `+
-        `<b>${d.matched_price_filter}</b> passed the exact price/affordability check · `+
-        `<b>${d.top.length}</b> trade setup(s).`;
-
-      document.getElementById('cards').innerHTML=d.top.length
-      ? d.top.map((x,i)=>`
-        <article>
-          <div class="top">
-            <div>
-              <em>#${i+1}</em>
-              <h3>${x.symbol}</h3>
-              <small>Stock price ₹${Number(x.price).toFixed(2)}</small>
-            </div>
-            <div class="score">${x.signal}<small>${x.confidence}% model score</small></div>
-          </div>
-
-          <div class="forecast">
-            <div><small>Entry</small><b>₹${x.entry}</b><small>Investment ₹${Number(x.capital).toLocaleString('en-IN',{maximumFractionDigits:2})}</small></div>
-            <div><small>Stop Loss</small><b>₹${x.stop_loss}</b><small class="target-money">Loss ₹${Math.abs((Number(x.stop_loss)-Number(x.entry))*Number(x.quantity)).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</small><small>Value ₹${(Number(x.capital)-Math.abs((Number(x.stop_loss)-Number(x.entry))*Number(x.quantity))).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</small></div>
-            <div><small>Target 1</small><b>₹${x.target1}</b><small class="target-money">Profit ₹${Math.abs((Number(x.target1)-Number(x.entry))*Number(x.quantity)).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</small><small>Value ₹${(Number(x.capital)+Math.abs((Number(x.target1)-Number(x.entry))*Number(x.quantity))).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</small></div>
-            <div><small>Target 2</small><b>₹${x.target2}</b><small class="target-money">Profit ₹${Math.abs((Number(x.target2)-Number(x.entry))*Number(x.quantity)).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</small><small>Value ₹${(Number(x.capital)+Math.abs((Number(x.target2)-Number(x.entry))*Number(x.quantity))).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</small></div>
-          </div>
-
-          <div class="afford">
-            <div><small>Max affordable shares</small><b>${x.max_affordable_qty}</b></div>
-            <div><small>Risk-based quantity</small><b>${x.quantity}</b></div>
-            <div><small>Capital used</small><b>${fmt(x.capital_used)}</b></div>
-            <div><small>Cash left</small><b>${fmt(x.cash_left)}</b></div>
-          </div>
-
-          <div class="meta">
-            <span>Capital ${fmt(x.capital)}</span>
-            <span>Risk ${x.risk_pct}%</span>
-            <span>Signal ${new Date(x.signal_time).toLocaleTimeString()}</span>
-          </div>
-
-          <div class="why">
-            <div>
-              <b>Signal reasons</b>
-              <ul>${x.reasons.map(v=>`<li>${v}</li>`).join('')}</ul>
-            </div>
-            <div>
-              <b>Risk rule</b>
-              <ul>
-                <li>Exit if stop-loss is hit.</li>
-                <li>Model score is not probability of profit.</li>
-              </ul>
-            </div>
-          </div>
-        </article>
-      `).join('')
-      : `<div class="empty"><b>NO TRADE</b><br>No stock in your selected price range produced a strong enough setup.</div>`;
-
-    }else{
-      st.innerHTML=
-        `Analyzed <b>${d.analysed}</b> stock(s) · showing the strongest 1-month candidates.`;
-
-      document.getElementById('cards').innerHTML=d.top.length
-      ? d.top.map((x,i)=>{
-          const e=x.one_month_estimate;
-          const a=x.affordability;
-          return `
-          <article>
-            <div class="top">
-              <div>
-                <em>#${i+1}</em>
-                <h3>${x.symbol}</h3>
-                <small>${x.company_name||''}</small>
-              </div>
-              <div class="score">${Number(x.stocklens_score).toFixed(1)}<small>/100 model score</small></div>
-            </div>
-
-            <div class="afford">
-              <div><small>Current share price</small><b>${fmt(a.share_price)}</b></div>
-              <div><small>Approx. whole shares</small><b>${a.affordable_qty}</b></div>
-            </div>
-
-            <div class="forecast">
-              <div><small>Your capital</small><b>${fmt(amount)}</b></div>
-              <div><small>Estimated 1-month value</small><b>${fmt(e.estimated_value_low)} – ${fmt(e.estimated_value_high)}</b></div>
-              <div><small>Estimated return range</small><b>${e.expected_return_low_pct}% to ${e.expected_return_high_pct}%</b></div>
-              <div><small>Downside scenario</small><b>${fmt(e.downside_value)}</b></div>
-            </div>
-
-            <div class="meta">
-              <span>Model score confidence ${e.confidence}%</span>
-              <span>${x.recommendation}</span>
-              <span>Risk ${x.risk_level||'—'}</span>
-            </div>
-
-            <div class="why">
-              <div>
-                <b>Why it ranks well</b>
-                <ul>${(x.positives||[]).slice(0,4).map(v=>`<li>${v}</li>`).join('')||'<li>Composite model score.</li>'}</ul>
-              </div>
-              <div>
-                <b>Warnings</b>
-                <ul>${(x.red_flags||[]).slice(0,3).map(v=>`<li>${v}</li>`).join('')||'<li>No major model warning.</li>'}</ul>
-              </div>
-            </div>
-          </article>`;
-        }).join('')
-      : `<div class="empty"><b>No candidate found.</b><br>Try scanning a wider universe.</div>`;
-    }
-
+    current==='day'?renderIntraday(d,amount):renderRanking(d,amount);
   }catch(e){
-    st.textContent='Scan failed: '+e.message;
+    st.textContent='The scan did not complete: '+e.message;
+  }finally{
+    go.disabled=false;
   }
 }
 
-function metric(label,value,sub=''){
-  return `<div class="metric"><small>${label}</small><strong>${value}</strong>${sub?`<span>${sub}</span>`:''}</div>`;
+function renderRanking(d,amount){
+  document.getElementById('regime').innerHTML=`NIFTY trend <b>${esc(d.market_regime.toLowerCase())}</b>`;
+  document.getElementById('status').innerHTML=
+    `Ranked <b>${d.ranked}</b> of ${d.universe_size} stocks with the frozen model. `+
+    `Trend regime is <b>${esc(d.market_regime.toLowerCase())}</b>, which sets the weighting.`;
+
+  document.getElementById('cards').innerHTML=d.top.length?d.top.map((x,i)=>{
+    const a=x.affordability,v=x.historical_value_band,s=x.signals;
+    return `<article class="entry">
+      <div class="rank">${i+1}</div>
+      <div>
+        <div class="head">
+          <h3 class="name">${esc(x.symbol)}</h3>
+          <div class="score">${Number(x.model_score).toFixed(1)}<i> of 100</i></div>
+        </div>
+        <p class="line">${fmt(a.share_price)} a share · ${a.affordable_qty} whole shares fit
+          ${fmt(amount)}, leaving ${fmt(a.cash_left)}</p>
+        ${strip(x.historical_1m_range)}
+        <div class="rows">
+          ${v?row('Your '+fmt(a.capital_deployed)+' in a middle month',
+                  fmt(v.low)+' to '+fmt(v.high)):''}
+          ${v?row('In the worst 1 month in 20',fmt(v.worst_5pct)):''}
+          ${row('Three-month return, against the index',s.relative_strength_3m_pct+'%')}
+          ${row('Distance below its 52-week high',Math.abs(s.below_52w_high_pct)+'%')}
+          ${row('Daily swing, typical',s.daily_volatility_pct+'%')}
+        </div>
+        <div class="why">Ranked here because it is
+          ${s.above_ema50?'above':'below'} its 50-day average and
+          ${s.above_ema200?'above':'below'} its 200-day, returned ${s.return_3m_pct}% over three
+          months and ${s.return_6m_pct}% over six.
+          <ul>
+            <li><strong>The range is history, not a forecast.</strong> It shows what this stock has
+              done before, not what it will do.</li>
+            <li>The model beat the index in 49% of backtested months.</li>
+          </ul>
+        </div>
+      </div>
+    </article>`;
+  }).join(''):
+    `<div class="empty"><b>No ranking came back.</b>Market data was unavailable for the universe.
+      Try again in a minute.</div>`;
 }
 
-function renderBreakdown(title,rows,monthly=false){
-  if(!rows || !rows.length) return '';
-  return `<div class="breakdown-block">
-    <h3>${title}</h3>
-    <div class="table-wrap"><table>
-      <thead><tr>${
-        monthly
-        ?'<th>Group</th><th>Samples</th><th>Positive 1M</th><th>Beat NIFTY</th><th>Avg return</th>'
-        :'<th>Group</th><th>Signals</th><th>T1 hit</th><th>Positive</th><th>Avg R</th>'
-      }</tr></thead>
-      <tbody>${rows.map(r=>monthly
-        ?`<tr><td>${r.group}</td><td>${r.samples}</td><td>${r.positive_after_1m_rate}%</td><td>${r.beat_nifty_rate}%</td><td>${r.avg_return_pct}%</td></tr>`
-        :`<tr><td>${r.group}</td><td>${r.signals}</td><td>${r.target1_hit_rate}%</td><td>${r.positive_outcome_rate}%</td><td>${r.avg_r}R</td></tr>`
-      ).join('')}</tbody>
-    </table></div>
-  </div>`;
+function renderIntraday(d,capital){
+  const st=document.getElementById('status');
+  st.innerHTML=`Scanned <b>${d.analysed}</b> stocks, <b>${d.matched_price_filter}</b> fit your price `+
+    `range, <b>${d.top.length}</b> produced a setup.`;
+
+  document.getElementById('cards').innerHTML=d.top.length?d.top.map((x,i)=>`
+    <article class="entry">
+      <div class="rank">${i+1}</div>
+      <div>
+        <div class="head">
+          <h3 class="name">${esc(x.symbol)}</h3>
+          <div class="signal ${x.signal==='BUY'?'buy':'sell'}">${esc(x.signal)}</div>
+        </div>
+        <p class="line">${fmt(x.price)} a share · scored ${x.confidence} of 100 · signalled at
+          ${new Date(x.signal_time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
+        <div class="rows">
+          ${row('Enter at','₹'+x.entry)}
+          ${row('Stop out at','₹'+x.stop_loss)}
+          ${row('First target','₹'+x.target1)}
+          ${row('Second target','₹'+x.target2)}
+          ${row('Size for '+x.risk_pct+'% risk',x.quantity+' shares, '+fmt(x.capital_used))}
+          ${row('Most you could buy',x.max_affordable_qty+' shares')}
+          ${row('Cash left over',fmt(x.cash_left))}
+        </div>
+        <div class="why">What triggered it:
+          <ul>${x.reasons.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>
+          <ul><li><strong>The score is not a probability of profit.</strong> Leave if the stop
+            is hit.</li></ul>
+        </div>
+      </div>
+    </article>`).join(''):
+    `<div class="empty"><b>No trade today.</b>Nothing in your price range set up cleanly enough.
+      Widening the price range or scanning more stocks may surface one.</div>`;
+}
+
+function table(title,rows,monthly){
+  if(!rows||!rows.length) return '';
+  const head=monthly
+    ?['Group','Samples','Closed up','Beat NIFTY','Average']
+    :['Group','Signals','Hit target','Closed up','Average'];
+  const body=rows.map(r=>monthly
+    ?`<tr><td>${esc(r.group)}</td><td>${r.samples}</td><td>${r.positive_after_1m_rate}%</td>
+       <td>${r.beat_nifty_rate}%</td><td>${r.avg_return_pct}%</td></tr>`
+    :`<tr><td>${esc(r.group)}</td><td>${r.signals}</td><td>${r.target1_hit_rate}%</td>
+       <td>${r.positive_outcome_rate}%</td><td>${r.avg_r}R</td></tr>`).join('');
+  return `<div class="caveat"><h3>${title}</h3><div class="scroll"><table>
+    <thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${body}</tbody></table></div></div>`;
 }
 
 async function runBacktest(){
   const engine=document.getElementById('btEngine').value;
   const limit=document.getElementById('btLimit').value;
-  const st=document.getElementById('status');
-  const cards=document.getElementById('cards');
+  const st=document.getElementById('status'),cards=document.getElementById('cards');
 
-  st.innerHTML='<b>Running historical backtest…</b> This can take a little longer than a normal scan.';
+  st.textContent='Replaying historical bars. This takes longer than a scan.';
   cards.innerHTML='';
 
-  try{
-    let url;
-    if(engine==='intraday'){
-      const period=document.getElementById('btWindow').value;
-      url=`/api/backtest/intraday?limit_universe=${limit}&period=${period}&max_hold_bars=12`;
-    }else{
-      const period=document.getElementById('btMonthlyPeriod').value;
-      url=`/api/backtest/monthly?limit_universe=${limit}&period=${period}&horizon_days=21&min_technical_score=65`;
-    }
-
-    const r=await fetch(url);
-    const d=await r.json();
-    if(!r.ok) throw Error(d.detail||'Backtest failed');
-
-    document.getElementById('updated').textContent=
-      'Tested '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-
-    if(engine==='intraday'){
-      const m=d.metrics;
-      st.innerHTML=`Measured from <b>${m.signals_tested}</b> historical signal(s) across <b>${d.symbols_tested.join(', ')}</b>. This is historical performance, not a future guarantee.`;
-
-      cards.innerHTML=`
-        <article class="accuracy-card">
-          <div class="scope good-scope"><b>✓ SAME LIVE INTRADAY RULES</b><span>${d.scope}</span></div>
-
-          <div class="metrics-grid">
-            ${metric('Signals tested',m.signals_tested)}
-            ${metric('Target 1 hit rate',m.target1_hit_rate+'%','T1 before expiry')}
-            ${metric('Positive outcome rate',m.positive_outcome_rate+'%')}
-            ${metric('Expectancy',m.avg_r+'R','Average per signal')}
-            ${metric('Profit factor',m.profit_factor)}
-            ${metric('Max drawdown',m.max_drawdown_r+'R')}
-          </div>
-
-          <div class="outcome-strip">
-            <span>🎯 T1 hits <b>${m.target1_hits}</b></span>
-            <span>🛑 Stops <b>${m.stop_hits}</b></span>
-            <span>⏱ Timeouts <b>${m.timeouts}</b></span>
-            <span>Avg winner <b>${m.avg_winner_r}R</b></span>
-            <span>Avg loser <b>${m.avg_loser_r}R</b></span>
-          </div>
-
-          ${renderBreakdown('BUY vs SELL',d.by_signal)}
-          ${renderBreakdown('Performance by model score',d.by_confidence)}
-          ${renderBreakdown('Performance by stock price',d.by_price)}
-          ${renderBreakdown('Performance by time of day',d.by_time)}
-
-          <div class="caveat"><b>Backtest limitations</b><ul>${d.limitations.map(x=>`<li>${x}</li>`).join('')}</ul></div>
-        </article>`;
-
-    }else{
-      const m=d.metrics;
-      st.innerHTML=`Measured from <b>${m.samples_tested}</b> non-overlapping historical sample(s) across <b>${d.symbols_tested.join(', ')}</b>.`;
-
-      cards.innerHTML=`
-        <article class="accuracy-card">
-          <div class="scope proxy-scope">
-            <b>⚠ 1-MONTH TECHNICAL PROXY</b>
-            <span>${d.scope}</span>
-          </div>
-
-          <div class="metrics-grid">
-            ${metric('Samples tested',m.samples_tested)}
-            ${metric('Positive after ~1M',m.positive_after_1m_rate+'%')}
-            ${metric('Beat NIFTY',m.beat_nifty_rate+'%')}
-            ${metric('Average stock return',m.avg_stock_return_pct+'%')}
-            ${metric('NIFTY average',m.avg_nifty_return_pct+'%')}
-            ${metric('Average excess return',m.avg_excess_return_pct+'%')}
-          </div>
-
-          ${renderBreakdown('Performance by technical score',d.by_score,true)}
-
-          <div class="caveat important"><b>Why this is not full-model accuracy</b><ul>${d.limitations.map(x=>`<li>${x}</li>`).join('')}</ul></div>
-        </article>`;
-    }
-
-  }catch(e){
-    st.textContent='Backtest failed: '+e.message;
-  }
-}
-
-
-function compareMetric(label,oldv,newv,suffix=''){
-  const oldN=Number(oldv), newN=Number(newv);
-  const better=(label.includes('Drawdown')) ? newN<oldN : newN>oldN;
-  return `<div class="compare-row"><span>${label}</span><b>${oldv}${suffix}</b><b class="${better?'better':'worse'}">${newv}${suffix}</b></div>`;
-}
-
-async function runLab(){
-  const engine=document.getElementById('labEngine').value;
-  const limit=document.getElementById('labLimit').value;
-  const st=document.getElementById('status'), cards=document.getElementById('cards');
-  st.innerHTML='<b>Testing baseline against v0.8 candidate…</b>';
-  cards.innerHTML='';
   try{
     const url=engine==='intraday'
-      ?`/api/research/intraday-compare?limit_universe=${limit}&period=1mo`
-      :`/api/research/monthly-compare?limit_universe=${limit}&period=2y`;
+      ?`/api/backtest/intraday?limit_universe=${limit}&period=`+
+        `${document.getElementById('btWindow').value}&max_hold_bars=12`
+      :`/api/backtest/monthly?limit_universe=${limit}&period=`+
+        `${document.getElementById('btMonthlyPeriod').value}&horizon_days=21&min_technical_score=65`;
+
     const r=await fetch(url),d=await r.json();
-    if(!r.ok) throw Error(d.detail||'Comparison failed');
-    const o=d.comparison.old,n=d.comparison.candidate;
-    document.getElementById('updated').textContent='Compared '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    if(!r.ok) throw Error(d.detail||'The test did not complete');
+
+    const m=d.metrics,tested=d.symbols_tested.join(', ');
+
     if(engine==='intraday'){
-      st.innerHTML=`Baseline <b>${o.signals}</b> signals vs candidate <b>${n.signals}</b>. Judge quality and sample size together.`;
-      cards.innerHTML=`<article class="accuracy-card">
-        <div class="scope good-scope"><b>🧪 EXPERIMENTAL v0.8 FILTERS</b><span>Not yet adopted as the live engine</span></div>
-        <div class="compare-head"><span>Metric</span><b>v0.7</b><b>v0.8 candidate</b></div>
-        ${compareMetric('Signals',o.signals,n.signals)}
-        ${compareMetric('T1 hit rate',o.t1_rate,n.t1_rate,'%')}
-        ${compareMetric('Positive rate',o.positive_rate,n.positive_rate,'%')}
-        ${compareMetric('Expectancy',o.avg_r,n.avg_r,'R')}
-        ${compareMetric('Profit factor',o.profit_factor,n.profit_factor)}
-        ${compareMetric('Max Drawdown',o.max_drawdown_r,n.max_drawdown_r,'R')}
-        <div class="caveat"><b>Candidate filters</b><ul>${d.comparison.candidate_rules.map(x=>`<li>${x}</li>`).join('')}</ul></div>
-        <div class="caveat important"><b>Validation rule</b><p>${d.warning} We should only promote these rules after they also improve on a separate unseen period.</p></div>
-      </article>`;
+      st.innerHTML=`Measured from <b>${m.signals_tested}</b> historical signals on ${esc(tested)}.`;
+      cards.innerHTML=`<article class="entry"><div class="rank">↳</div><div>
+        <div class="head"><h3 class="name">Intraday, live rules</h3></div>
+        <p class="line">${esc(d.scope)}</p>
+        <div class="rows metrics">
+          ${row('Signals tested',m.signals_tested)}
+          ${row('Reached the first target',m.target1_hit_rate+'%')}
+          ${row('Closed positive',m.positive_outcome_rate+'%')}
+          ${row('Average per signal',m.avg_r+'R')}
+          ${row('Profit factor',m.profit_factor)}
+          ${row('Deepest drawdown',m.max_drawdown_r+'R')}
+          ${row('Targets, stops, timeouts',
+                m.target1_hits+', '+m.stop_hits+', '+m.timeouts)}
+          ${row('Average winner against loser',m.avg_winner_r+'R against '+m.avg_loser_r+'R')}
+        </div>
+        ${table('By direction',d.by_signal)}
+        ${table('By model score',d.by_confidence)}
+        ${table('By share price',d.by_price)}
+        ${table('By time of day',d.by_time)}
+        <div class="caveat"><h3>What this test cannot tell you</h3>
+          <ul>${d.limitations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+      </div></article>`;
     }else{
-      st.innerHTML=`Baseline <b>${o.samples}</b> samples vs candidate <b>${n.samples}</b>. This remains a technical proxy.`;
-      cards.innerHTML=`<article class="accuracy-card">
-        <div class="scope proxy-scope"><b>🧪 1-MONTH CANDIDATE FILTER</b><span>Technical proxy only</span></div>
-        <div class="compare-head"><span>Metric</span><b>v0.7</b><b>v0.8 candidate</b></div>
-        ${compareMetric('Samples',o.samples,n.samples)}
-        ${compareMetric('Positive after 1M',o.positive_rate,n.positive_rate,'%')}
-        ${compareMetric('Beat NIFTY',o.beat_nifty_rate,n.beat_nifty_rate,'%')}
-        ${compareMetric('Average return',o.avg_return,n.avg_return,'%')}
-        ${compareMetric('Average excess',o.avg_excess,n.avg_excess,'%')}
-        <div class="caveat"><b>Candidate filters</b><ul>${d.comparison.candidate_rules.map(x=>`<li>${x}</li>`).join('')}</ul></div>
-        <div class="caveat important"><b>Important</b><p>${d.warning}</p></div>
-      </article>`;
+      st.innerHTML=`Measured from <b>${m.samples_tested}</b> non-overlapping windows on ${esc(tested)}.`;
+      cards.innerHTML=`<article class="entry"><div class="rank">↳</div><div>
+        <div class="head"><h3 class="name">Monthly, technical proxy</h3></div>
+        <p class="line">${esc(d.scope)}</p>
+        <div class="rows metrics">
+          ${row('Windows tested',m.samples_tested)}
+          ${row('Closed up after a month',m.positive_after_1m_rate+'%')}
+          ${row('Beat the NIFTY',m.beat_nifty_rate+'%')}
+          ${row('Average stock return',m.avg_stock_return_pct+'%')}
+          ${row('Average NIFTY return',m.avg_nifty_return_pct+'%')}
+          ${row('Difference',m.avg_excess_return_pct+'%')}
+        </div>
+        ${table('By technical score',d.by_score,true)}
+        <div class="caveat"><h3>Why this is not full-model accuracy</h3>
+          <ul>${d.limitations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+      </div></article>`;
     }
-  }catch(e){st.textContent='Comparison failed: '+e.message}
-}
-
-
-async function runOptimizer(){
- const limit=Math.max(5,+document.getElementById('labLimit').value),st=document.getElementById('status'),cards=document.getElementById('cards');
- st.innerHTML='<b>Running walk-forward optimizer…</b> This uses several years of historical data.';cards.innerHTML='';
- try{
-  const r=await fetch(`/api/research/walk-forward?limit_universe=${limit}&period=5y`),d=await r.json();
-  if(!r.ok)throw Error(d.detail||'Optimizer failed');
-  const t=d.train,v=d.validation,u=d.unseen_test,b=d.baseline_unseen_test;
-  const verdict=d.approved_for_live_candidate?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';
-  st.innerHTML=`Tested <b>${d.total_samples}</b> historical samples. ${verdict}`;
-  const row=(l,a,c,e)=>`<div class="wf-row"><span>${l}</span><b>${a}</b><b>${c}</b><b>${e}</b></div>`;
-  const rules=Object.entries(d.selected_rule).map(([k,x])=>`<li>${k.replaceAll('_',' ')}: <b>${x}</b></li>`).join('');
-  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v0.9 WALK-FORWARD</b><span>Train → Validation → Unseen Test</span></div>
-   <div class="wf-head"><span>Metric</span><b>Train</b><b>Validation</b><b>Unseen</b></div>
-   ${row('Samples',t.samples,v.samples,u.samples)}${row('Positive after 1M',t.positive_rate+'%',v.positive_rate+'%',u.positive_rate+'%')}
-   ${row('Beat NIFTY',t.beat_nifty_rate+'%',v.beat_nifty_rate+'%',u.beat_nifty_rate+'%')}
-   ${row('Average return',t.avg_return+'%',v.avg_return+'%',u.avg_return+'%')}
-   ${row('Excess vs NIFTY',t.avg_excess+'%',v.avg_excess+'%',u.avg_excess+'%')}
-   <div class="baseline-box"><b>UNSEEN comparison</b><div>v0.9 excess <strong>${u.avg_excess}%</strong></div><div>v0.7 excess <strong>${b.avg_excess}%</strong></div><div>v0.9 beat NIFTY <strong>${u.beat_nifty_rate}%</strong></div><div>v0.7 beat NIFTY <strong>${b.beat_nifty_rate}%</strong></div></div>
-   <div class="caveat"><b>Selected rules</b><ul>${rules}</ul></div>
-   <div class="caveat important"><b>Decision</b><p>PASS requires positive unseen excess return, >50% NIFTY-beating rate, enough unseen samples and improvement over baseline.</p></div></article>`;
- }catch(e){st.textContent='Walk-forward optimizer failed: '+e.message}
-}
-
-async function runMonthlyRanker(){
- const limit=+document.getElementById('monthlyRankLimit').value,st=document.getElementById('status'),cards=document.getElementById('cards'); st.innerHTML=`<b>Running v1.1 monthly ranking on ${limit} stocks…</b>`;cards.innerHTML='';
- try{const r=await fetch(`/api/research/monthly-ranking?limit_universe=${limit}&top_n=3&period=5y`),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const a=d.research,u=d.unseen,v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';const row=(l,x,y)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b>${y}</b></div>`;st.innerHTML=`Tested <b>${d.total_months}</b> monthly Top-3 portfolios. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.1 MONTHLY RANKING</b><span>Top 3 vs NIFTY</span></div><div class="compare-head"><span>Metric</span><b>Research</b><b>Unseen</b></div>${row('Months',a.months,u.months)}${row('Positive months',a.positive_months+'%',u.positive_months+'%')}${row('Beat NIFTY',a.beat_nifty+'%',u.beat_nifty+'%')}${row('Average return',a.avg_return+'%',u.avg_return+'%')}${row('NIFTY average',a.avg_nifty+'%',u.avg_nifty+'%')}${row('Average excess',a.avg_excess+'%',u.avg_excess+'%')}${row('Max drawdown',a.max_drawdown+'%',u.max_drawdown+'%')}<div class="caveat important"><b>PASS rule</b><p>At least 6 unseen months, positive average excess return and >50% NIFTY-beating months.</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.1 ranking failed: '+e.message}}
-
-
-async function runRollingValidation(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.2 rolling validation with frozen 20-stock Top-3 logic…</b>';cards.innerHTML='';
- try{const r=await fetch('/api/research/rolling-validation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const e=d.evaluation,v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';const metric=(l,x)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b></b></div>`;const blocks=d.blocks.map(b=>`<div class="compare-row"><span>Block ${b.block} · ${b.start} → ${b.end}</span><b>${b.avg_excess}% excess</b><b>${b.beat_nifty}% beat</b></div>`).join('');st.innerHTML=`Evaluated <b>${e.months}</b> rolling months after an ${d.warmup_months}-month warm-up. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.2 ROLLING VALIDATION</b><span>Frozen 20-stock universe · Top 3</span></div><div class="compare-head"><span>Metric</span><b>Result</b><b></b></div>${metric('Positive months',e.positive_months+'%')}${metric('Beat NIFTY',e.beat_nifty+'%')}${metric('Average monthly return',e.avg_return+'%')}${metric('Average excess',e.avg_excess+'%')}${metric('Max drawdown',e.max_drawdown+'%')}${metric('Cumulative portfolio return',e.cumulative_return+'%')}${metric('NIFTY cumulative return',e.nifty_cumulative+'%')}<div class="caveat"><b>Rolling stability</b>${blocks}</div><div class="caveat important"><b>PASS rule</b><p>At least 18 evaluation months, positive average excess, >50% NIFTY-beating months, and positive/strong NIFTY-beating results in at least 60% of rolling blocks.</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.2 rolling validation failed: '+e.message}
-}
-
-
-async function runRegimeValidation(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.3 point-in-time market regime validation…</b>';cards.innerHTML='';
- try{const r=await fetch('/api/research/regime-validation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REVIEW</span>';const row=x=>`<div class="compare-row"><span>${x.regime}</span><b>${x.months} mo · ${x.positive_months}% positive</b><b>${x.avg_excess}% excess · ${x.beat_nifty}% beat</b></div>`;const weak=d.weak_regimes.length?d.weak_regimes.join(', '):'None among regimes with at least 3 observations';st.innerHTML=`Evaluated <b>${d.evaluation_months}</b> months by market regime. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.3 MARKET REGIME VALIDATION</b><span>${d.frozen_model}</span></div><div class="compare-head"><span>Trend regime</span><b>Sample / positive</b><b>Excess / beat NIFTY</b></div>${d.trend_regimes.map(row).join('')}<div class="caveat"><b>Volatility regimes</b>${d.volatility_regimes.map(row).join('')}</div><div class="caveat"><b>Weak regimes</b><p>${weak}</p></div><div class="caveat important"><b>Point-in-time method</b><p>${d.method}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.3 regime validation failed: '+e.message}
-}
-
-async function runRegimeAwareValidation(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.4 regime-aware candidate against frozen v1.2…</b>';cards.innerHTML='';
- try{const r=await fetch('/api/research/regime-aware-validation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;const rules=d.rules.map(x=>`<li>${x}</li>`).join('');const regimes=d.candidate_regimes.map(x=>`<div class="compare-row"><span>${x.regime}</span><b>${x.months} mo · ${x.positive_months}% positive</b><b>${x.avg_excess}% excess · ${x.beat_nifty}% beat</b></div>`).join('');st.innerHTML=`Evaluated <b>${d.evaluation_months}</b> identical out-of-warmup months. ${v}`;cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.4 REGIME-AWARE VALIDATION</b><span>Candidate vs frozen v1.2</span></div><div class="compare-head"><span>Metric</span><b>v1.2 baseline</b><b>v1.4 candidate</b></div>${row('Positive months',d.baseline.positive_months+'%',d.candidate.positive_months+'%')}${row('Beat NIFTY',d.baseline.beat_nifty+'%',d.candidate.beat_nifty+'%')}${row('Average return',d.baseline.avg_return+'%',d.candidate.avg_return+'%')}${row('Average excess',d.baseline.avg_excess+'%',d.candidate.avg_excess+'%')}${row('Max drawdown',d.baseline.max_drawdown+'%',d.candidate.max_drawdown+'%')}<div class="caveat"><b>Candidate performance by trend regime</b>${regimes}</div><div class="caveat"><b>Candidate rules</b><ul>${rules}</ul></div><div class="caveat important"><b>Promotion rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.4 regime-aware validation failed: '+e.message}
-}
-
-
-async function runSidewaysOptimizer(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.5 SIDEWAYS-only optimizer…</b>';cards.innerHTML='';
- try{const r=await fetch('/api/research/sideways-optimizer'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
- const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';
- const rows=d.candidates.map(x=>`<div class="compare-row"><span>${x.name}</span><b>${x.sideways.avg_excess}% excess · ${x.sideways.beat_nifty}% beat</b><b>${x.overall.avg_excess}% overall · ${x.overall.max_drawdown}% DD</b></div>`).join('');
- st.innerHTML=`Evaluated <b>${d.evaluation_months}</b> identical months. Best research candidate: <b>${d.best_candidate}</b> ${v}`;
- cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.5 SIDEWAYS-MARKET OPTIMIZER</b><span>v1.2 remains frozen</span></div><div class="compare-head"><span>Candidate</span><b>SIDEWAYS result</b><b>Overall result</b></div>${rows}<div class="caveat"><b>Candidate rules</b><ul>${d.rules.map(x=>`<li>${x}</li>`).join('')}</ul></div><div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
- }catch(e){st.textContent='v1.5 sideways optimizer failed: '+e.message}
-}
-
-
-async function runV16Confirmation(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.6 frozen-winner holdout confirmation…</b>';cards.innerHTML='';
- try{const r=await fetch('/api/research/v16-holdout-confirmation'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
- const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REJECT</span>';
- const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;
- st.innerHTML=`Frozen <b>${d.frozen_candidate}</b> tested on ${d.holdout_start} → ${d.holdout_end}. ${v}`;
- cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.6 HOLDOUT CONFIRMATION</b><span>v1.5 winner frozen — no retuning</span></div><div class="compare-head"><span>Metric</span><b>v1.2 baseline</b><b>Frozen v1.5 winner</b></div>${row('Overall months',d.baseline.months,d.candidate.months)}${row('Overall average excess',d.baseline.avg_excess+'%',d.candidate.avg_excess+'%')}${row('Overall beat NIFTY',d.baseline.beat_nifty+'%',d.candidate.beat_nifty+'%')}${row('Max drawdown',d.baseline.max_drawdown+'%',d.candidate.max_drawdown+'%')}<div class="caveat"><b>SIDEWAYS holdout</b>${row('Sideways months',d.baseline_sideways.months,d.candidate_sideways.months)}${row('Sideways average excess',d.baseline_sideways.avg_excess+'%',d.candidate_sideways.avg_excess+'%')}${row('Sideways beat NIFTY',d.baseline_sideways.beat_nifty+'%',d.candidate_sideways.beat_nifty+'%')}</div><div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
- }catch(e){st.textContent='v1.6 holdout confirmation failed: '+e.message}
+  }catch(e){
+    st.textContent='The test did not complete: '+e.message;
+  }
 }
 
 updatePriceText();
 backtestEngineChanged();
-
-async function runV17Robustness(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');
- st.innerHTML='<b>Running v1.7 stress & robustness validation…</b>';cards.innerHTML='';
- try{
-  const r=await fetch('/api/research/v17-stress-robustness'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
-  const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REVIEW</span>';
-  const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;
-  st.innerHTML=`Stress-tested <b>${d.months}</b> monthly portfolios with frozen <b>${d.frozen_candidate}</b>. ${v}`;
-  const tn=Object.entries(d.top_n_sensitivity).map(([n,x])=>row('Top '+n,x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
-  const wp=d.weight_perturbations.map(x=>row(x.name,x.overall.avg_excess+'% overall',x.sideways.avg_excess+'% sideways')).join('');
-  const rg=Object.entries(d.trend_regimes).map(([n,x])=>row(n,x.months+' mo · '+x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
-  const vr=Object.entries(d.volatility_regimes).map(([n,x])=>row(n+' VOL',x.months+' mo · '+x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
-  const ch=Object.entries(d.chronological_stability).map(([n,x])=>row(n,x.months+' mo · '+x.avg_excess+'% excess',x.max_drawdown+'% DD')).join('');
-  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.7 STRESS & ROBUSTNESS</b><span>Frozen v1.5 winner — no retuning</span></div>
-   <div class="compare-head"><span>Core result</span><b>Performance</b><b>Stability</b></div>
-   ${row('Frozen Top 3',d.overall.avg_excess+'% excess',d.overall.beat_nifty+'% beat · '+d.overall.max_drawdown+'% DD')}
-   <div class="caveat"><b>Top-N sensitivity</b>${tn}</div>
-   <div class="caveat"><b>Small weight perturbations</b>${wp}</div>
-   <div class="caveat"><b>Trend regimes</b>${rg}</div>
-   <div class="caveat"><b>Volatility regimes</b>${vr}</div>
-   <div class="caveat"><b>Chronological stability</b>${ch}</div>
-   <div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div>
-   <div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
- }catch(e){st.textContent='v1.7 robustness test failed: '+e.message}
-}
-
-
-async function runV18Execution(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');
- st.innerHTML='<b>Running v1.8 execution & cost validation…</b>';cards.innerHTML='';
- try{
-  const r=await fetch('/api/research/v18-execution-cost'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
-  const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REVIEW</span>';
-  const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;
-  const costs=d.cost_scenarios.map(x=>row(x.name+' · '+x.round_trip_bps+' bps',x.avg_excess+'% excess',x.beat_nifty+'% beat · '+x.max_drawdown+'% DD')).join('');
-  const timing=d.timing_sensitivity.map(x=>row(x.name,x.avg_excess+'% excess',x.beat_nifty+'% beat')).join('');
-  st.innerHTML=`Tested <b>${d.months}</b> frozen monthly portfolios after execution friction. ${v}`;
-  cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.8 EXECUTION & COST VALIDATION</b><span>Frozen v1.5 winner — no retuning</span></div>
-   <div class="compare-head"><span>Gross model</span><b>Performance</b><b>Implementation</b></div>
-   ${row('Frozen Top 3',d.gross.avg_excess+'% excess',d.gross.beat_nifty+'% beat · '+d.gross.max_drawdown+'% DD')}
-   ${row('Average monthly turnover',d.average_monthly_turnover_pct+'%','Top-3 portfolio')}
-   <div class="caveat"><b>Transaction cost + slippage scenarios</b>${costs}</div>
-   <div class="caveat"><b>Rebalance timing sensitivity</b>${timing}</div>
-   <div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div>
-   <div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;
- }catch(e){st.textContent='v1.8 execution test failed: '+e.message}
-}
-
-async function runV19Portfolio(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v1.9 realistic portfolio simulation…</b>';cards.innerHTML='';
- try{const r=await fetch('/api/research/v19-portfolio-simulation?capital=100000'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
- const v=d.verdict==='PASS'?'<span class="verdict pass">PASS</span>':'<span class="verdict fail">REVIEW</span>'; const row=(l,a,b)=>`<div class="compare-row"><span>${l}</span><b>${a}</b><b>${b}</b></div>`;
- st.innerHTML=`Simulated <b>${d.months}</b> monthly whole-share portfolios. ${v}`;
- cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v1.9 REALISTIC PORTFOLIO SIMULATION</b><span>Frozen v1.5 winner — no retuning</span></div><div class="compare-head"><span>Metric</span><b>StockLens</b><b>NIFTY / implementation</b></div>${row('Initial capital','₹'+d.initial_capital.toLocaleString('en-IN'),d.cost_bps+' bps cost')}${row('Final capital','₹'+d.final_capital.toLocaleString('en-IN'),'₹'+d.nifty_final_capital.toLocaleString('en-IN'))}${row('Cumulative return',d.total_return_pct+'%',d.nifty_total_return_pct+'% NIFTY')}${row('Average monthly excess',d.avg_monthly_excess_pct+'%',d.beat_nifty_pct+'% beat NIFTY')}${row('Max drawdown',d.max_drawdown_pct+'%','₹'+d.total_cost.toLocaleString('en-IN')+' total costs')}${row('Average leftover cash','₹'+d.avg_cash_left.toLocaleString('en-IN'),'Whole-share sizing')}<div class="caveat important"><b>PASS rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v1.9 portfolio simulation failed: '+e.message}
-}
-
-
-async function runV20Final(){
- const st=document.getElementById('status'),cards=document.getElementById('cards');st.innerHTML='<b>Running v2.0 final stability validation…</b>';cards.innerHTML='';
- try{const r=await fetch('/api/research/v20-final-stability?capital=100000'),d=await r.json();if(!r.ok)throw Error(d.detail||'failed');
- const cls=d.verdict==='STABLE'?'pass':'fail',v=`<span class="verdict ${cls}">${d.verdict}</span>`;const row=(l,x,y)=>`<div class="compare-row"><span>${l}</span><b>${x}</b><b>${y}</b></div>`;
- st.innerHTML=`Final validation of <b>${d.months}</b> frozen monthly portfolios. ${v}`;
- cards.innerHTML=`<article class="accuracy-card"><div class="scope good-scope"><b>v2.0 FINAL STABILITY VALIDATION</b><span>Frozen v1.5 winner — no retuning</span></div><div class="compare-head"><span>Metric</span><b>StockLens</b><b>NIFTY / risk</b></div>${row('Final capital','₹'+d.final_capital.toLocaleString('en-IN'),'₹'+d.nifty_final_capital.toLocaleString('en-IN'))}${row('Cumulative return',d.cumulative_return_pct+'%',d.nifty_cumulative_return_pct+'% NIFTY')}${row('CAGR',d.cagr_pct+'%',d.nifty_cagr_pct+'% NIFTY')}${row('Average monthly excess',d.avg_monthly_excess_pct+'%',d.beat_nifty_pct+'% beat NIFTY')}${row('Max drawdown',d.max_drawdown_pct+'%','₹'+d.total_cost.toLocaleString('en-IN')+' costs')}${row('Recent 6M annualized volatility',d.recent_6m_annualized_volatility_pct+'%',(d.recent_6m_sharpe_proxy??'N/A')+' Sharpe proxy')}${row('Recent 6M worst month',d.recent_6m_worst_month_pct+'%',d.recent_6m_positive_months_pct+'% positive')}<div class="caveat important"><b>STABLE rule</b><p>${d.pass_rule}</p></div><div class="caveat"><b>Important</b><p>${d.warning}</p></div></article>`;}catch(e){st.textContent='v2.0 final validation failed: '+e.message}
-}
 </script>
 </body>
 </html>
