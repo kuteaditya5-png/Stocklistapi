@@ -42,9 +42,10 @@ def _frame(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
 def live_monthly_ranking(
     symbols: list[str],
-    top_n: int = 3,
+    top_n: int = 8,
     period: str = DEFAULT_PERIOD,
     horizon_days: int = 21,
+    regime_filter: bool = True,
 ) -> dict:
     raw = yf.download(
         symbols + [BENCHMARK],
@@ -66,6 +67,10 @@ def live_monthly_ranking(
     bench_e200 = float(b.ewm(span=200, adjust=False).mean().iloc[-1])
     bench_r63 = float(b.pct_change(63).iloc[-1]) if len(b) > 63 else 0.0
     regime = market_regime(float(b.iloc[-1]), bench_e200, bench_r63)
+
+    # When the index is below its own 200-day average, the frozen rule sits in
+    # cash rather than picking the best of a falling market.
+    index_below_trend = float(b.iloc[-1]) < bench_e200
 
     rows = []
     skipped = []
@@ -150,34 +155,67 @@ def live_monthly_ranking(
         "skipped": len(skipped),
         "horizon_trading_days": horizon_days,
         "history_window": period,
+        "index_below_200day": bool(index_below_trend),
+        "hold_cash": bool(regime_filter and index_below_trend),
         "top": out,
         "disclaimer": (
             "Ranking only. The historical range is this stock's own past "
-            f"{horizon_days}-day return distribution, not a forecast. The model's "
-            "measured monthly NIFTY-beat rate is 49%."
+            f"{horizon_days}-day return distribution, not a forecast."
         ),
     }
 
 
 def attach_affordability(ranking: dict, amount: float) -> dict:
-    """Convert a ranking into whole-share position sizes for a given capital.
+    """Size the whole basket, not each name against the full amount.
 
-    Rupee values are derived from the *historical* percentile band, and are
-    labelled as historical dispersion rather than an expected value.
+    Capital is split evenly across the picks and rounded down to whole shares,
+    so an expensive share can leave a name unfunded. Unspent money is reported
+    rather than quietly assumed away.
     """
-    for row in ranking.get("top", []):
+    picks = ranking.get("top", [])
+    if not picks:
+        ranking["investment_amount"] = amount
+        return ranking
+
+    # A small amount cannot carry a wide basket: at 8 names, a 5,000 rupee
+    # budget is 625 per name and most NSE shares cost more than that. Shrink
+    # the basket to the widest size this amount can actually fund, rather than
+    # listing names the person cannot buy.
+    requested = len(picks)
+    fitted = requested
+    for n in range(requested, 0, -1):
+        if all(x["price"] <= amount / n for x in picks[:n]):
+            fitted = n
+            break
+    else:
+        fitted = 1
+
+    picks = picks[:fitted]
+    ranking["top"] = picks
+    per_name = amount / len(picks)
+    cash = amount
+    deployed_total = 0.0
+    funded = 0
+
+    for row in picks:
         price = row["price"]
-        qty = int(amount // price) if price > 0 else 0
+        qty = int(per_name // price) if price > 0 else 0
         deployed = round(qty * price, 2)
-        stats = row.get("historical_1m_range")
+
+        if qty > 0:
+            funded += 1
+            cash -= deployed
+            deployed_total += deployed
 
         row["affordability"] = {
             "share_price": price,
-            "affordable_qty": qty,
+            "budget_per_name": round(per_name, 2),
+            "shares": qty,
             "capital_deployed": deployed,
-            "cash_left": round(max(0.0, amount - deployed), 2),
+            "unfunded": qty == 0,
         }
 
+        stats = row.get("historical_1m_range")
         if stats and qty > 0:
             row["historical_value_band"] = {
                 "basis": "20th-80th percentile of this stock's past 1-month returns",
@@ -190,4 +228,21 @@ def attach_affordability(ranking: dict, amount: float) -> dict:
             row["historical_value_band"] = None
 
     ranking["investment_amount"] = amount
+    ranking["basket"] = {
+        "names": len(picks),
+        "requested_names": requested,
+        "narrowed_for_budget": fitted < requested,
+        "funded": funded,
+        "unfunded": len(picks) - funded,
+        "capital_deployed": round(deployed_total, 2),
+        "cash_left": round(max(0.0, cash), 2),
+        "note": (
+            f"{amount:,.0f} rupees spreads across {requested} names at "
+            f"{amount / requested:,.0f} each, which is below the share price of "
+            f"some picks, so the basket was narrowed to {fitted}. A narrower "
+            "basket is more concentrated and swings harder."
+            if fitted < requested
+            else "Split evenly across the basket and rounded down to whole shares."
+        ),
+    }
     return ranking

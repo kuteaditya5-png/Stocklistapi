@@ -14,17 +14,17 @@ ROOT = API_DIR.parent
 if str(API_DIR) not in sys.path:
     sys.path.insert(0, str(API_DIR))
 
-app = FastAPI(title="StockLens AI", version="2.1.0")
+app = FastAPI(title="StockLens AI", version="2.2.0")
 
 STATIC = ROOT / "static"
 if STATIC.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
-def _universe() -> list[str]:
+def _universe(name: str = "nifty50") -> list[str]:
     # Lazy import keeps the root page/health route lightweight on Vercel.
-    from universe import NIFTY_50
-    return NIFTY_50
+    from universe import get_universe
+    return get_universe(name)
 
 
 def _analyse_stock(symbol: str):
@@ -47,7 +47,7 @@ def home():
 def health():
     return {
         "status": "ok",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "dashboard_mode": "embedded",
         "dashboard_module": (API_DIR / "dashboard.py").exists(),
         "static_folder_optional": STATIC.exists(),
@@ -424,6 +424,9 @@ def research_sideways_optimizer():
 def portfolio(
     amount: float = Query(..., gt=0),
     risk: str = Query("moderate"),
+    universe: str = Query("nifty200"),
+    top_n: int = Query(8, ge=1, le=20),
+    regime_filter: bool = Query(True),
     limit_universe: int = Query(0, ge=0, le=50),
 ):
     """1-month ranking.
@@ -439,7 +442,9 @@ def portfolio(
     """
     from live_ranker import attach_affordability, live_monthly_ranking
 
-    ranking = live_monthly_ranking(_universe(), top_n=3)
+    ranking = live_monthly_ranking(
+        _universe(universe), top_n=top_n, regime_filter=regime_filter
+    )
     result = attach_affordability(ranking, amount)
 
     result["risk_profile_note"] = (
@@ -450,6 +455,51 @@ def portfolio(
         "The full universe is always ranked; this parameter is ignored."
     )
     return result
+
+
+@app.get("/api/backtest/strategy")
+def backtest_strategy(
+    universe: str = Query("nifty200"),
+    top_n: int = Query(8, ge=1, le=20),
+    hold_days: int = Query(21, ge=5, le=126),
+    regime_filter: bool = Query(False),
+    period: str = Query("10y"),
+    capital: float = Query(100000, gt=0),
+    slippage_bps: float = Query(10, ge=0, le=100),
+    stcg_pct: float = Query(20, ge=0, le=40),
+    brokerage_bps: float = Query(0, ge=0, le=100),
+):
+    """Backtest with whole-share sizing, Indian transaction costs and STCG tax."""
+    from strategy import Costs, run_strategy
+
+    return run_strategy(
+        _universe(universe),
+        period=period if period in {"5y", "10y", "max"} else "10y",
+        top_n=top_n,
+        hold_days=hold_days,
+        regime_filter=regime_filter,
+        capital=capital,
+        costs=Costs(
+            brokerage_bps=brokerage_bps,
+            slippage_bps=slippage_bps,
+            stcg_pct=stcg_pct,
+        ),
+    )
+
+
+@app.get("/api/backtest/compare")
+def backtest_compare(
+    universe: str = Query("nifty200"),
+    period: str = Query("10y"),
+):
+    """Fixed four-way grid so the turnover and tax effect is visible at once."""
+    from strategy import compare_configurations
+
+    return compare_configurations(
+        _universe(universe),
+        period=period if period in {"5y", "10y"} else "10y",
+    )
+
 
 
 @app.get("/api/research/v16-holdout-confirmation")
