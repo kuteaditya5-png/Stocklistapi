@@ -3,6 +3,13 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from ranking_core import (
+    base_score,
+    pct_rank,
+    sideways_score,
+    trend_component,
+)
+
 def _frame(raw,s):
     if isinstance(raw.columns,pd.MultiIndex):
         if s in set(raw.columns.get_level_values(0)): return raw[s].dropna(how="all").copy()
@@ -10,8 +17,12 @@ def _frame(raw,s):
     return raw.copy()
 
 def _pct(s,good=True):
-    p=s.rank(pct=True)*100
-    return p if good else 100-p
+    # Kept as a thin alias so the frozen research code below reads unchanged.
+    return pct_rank(s,good)
+
+
+def _weighted(weights,feats):
+    return sum(float(w)*f for w,f in zip(weights,feats))
 
 def _metrics(rows):
     p=np.array([r["portfolio_return"] for r in rows]); n=np.array([r["nifty_return"] for r in rows])
@@ -42,8 +53,8 @@ def monthly_ranking_backtest(symbols,period="5y",top_n=3):
             if any(pd.isna(r[k]) for k in keys): continue
             q.append(dict(symbol=s.replace('.NS',''),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<top_n: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
-        z['score']=.25*_pct(z.rs63)+.15*_pct(z.rs21)+.15*_pct(z.r63)+.10*_pct(z.r126)+.10*trend+.10*_pct(z.vol,False)+.10*_pct(z.d52)+.05*_pct(z.vr)
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
+        z['score']=base_score(_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr))
         p=z.nlargest(top_n,'score').copy(); p['ret']=(p.future/p.price-1)*100; pr=float(p.ret.mean()); nr=float((p.iloc[0].fnifty/p.iloc[0].nifty-1)*100)
         months.append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),"nifty_return":round(nr,2),"excess":round(pr-nr,2),"picks":[{"symbol":r.symbol,"score":round(float(r.score),1),"return":round(float(r.ret),2)} for _,r in p.iterrows()]})
     if len(months)<12: raise ValueError('Not enough monthly observations')
@@ -117,8 +128,8 @@ def _monthly_rows(symbols,period="5y",top_n=3):
             if any(pd.isna(r[k]) for k in keys): continue
             q.append(dict(symbol=s.replace('.NS',''),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<top_n: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
-        z['score']=.25*_pct(z.rs63)+.15*_pct(z.rs21)+.15*_pct(z.r63)+.10*_pct(z.r126)+.10*trend+.10*_pct(z.vol,False)+.10*_pct(z.d52)+.05*_pct(z.vr)
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
+        z['score']=base_score(_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr))
         p=z.nlargest(top_n,'score').copy(); p['ret']=(p.future/p.price-1)*100; pr=float(p.ret.mean()); nr=float((p.iloc[0].fnifty/p.iloc[0].nifty-1)*100)
         months.append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),"nifty_return":round(nr,2),"excess":round(pr-nr,2)})
     return months
@@ -200,8 +211,8 @@ def _monthly_rows_with_regime(symbols,period="5y",top_n=3):
             if any(pd.isna(r[k]) for k in keys): continue
             q.append(dict(symbol=s.replace('.NS',''),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<top_n: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
-        z['score']=.25*_pct(z.rs63)+.15*_pct(z.rs21)+.15*_pct(z.r63)+.10*_pct(z.r126)+.10*trend+.10*_pct(z.vol,False)+.10*_pct(z.d52)+.05*_pct(z.vr)
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
+        z['score']=base_score(_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr))
         p=z.nlargest(top_n,'score').copy(); p['ret']=(p.future/p.price-1)*100; pr=float(p.ret.mean()); nr=float((p.iloc[0].fnifty/p.iloc[0].nifty-1)*100)
         months.append({"date":str(pd.Timestamp(dt).date()),"portfolio_return":round(pr,2),"nifty_return":round(nr,2),"excess":round(pr-nr,2),"trend_regime":trend_regime,"vol_regime":vol_regime})
     return months
@@ -241,13 +252,13 @@ def regime_aware_validation(symbols, period="5y", top_n=3, warmup_months=18, blo
             if any(pd.isna(r[k]) for k in keys): continue
             q.append(dict(symbol=s.replace('.NS',''),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<top_n: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
         prs63=_pct(z.rs63); prs21=_pct(z.rs21); pr63=_pct(z.r63); pr126=_pct(z.r126); pvol=_pct(z.vol,False); pd52=_pct(z.d52); pvr=_pct(z.vr)
-        z['base_score']=.25*prs63+.15*prs21+.15*pr63+.10*pr126+.10*trend+.10*pvol+.10*pd52+.05*pvr
+        z['base_score']=base_score(prs63,prs21,pr63,pr126,trend,pvol,pd52,pvr)
         # Predefined v1.4 candidate: attack the diagnosed SIDEWAYS weakness with
         # more relative strength/trend quality; in HIGH VOL emphasize low volatility.
         if regime=="SIDEWAYS":
-            z['cand_score']=.32*prs63+.18*prs21+.10*pr63+.05*pr126+.15*trend+.08*pvol+.08*pd52+.04*pvr
+            z['cand_score']=_weighted((.32,.18,.10,.05,.15,.08,.08,.04),(prs63,prs21,pr63,pr126,trend,pvol,pd52,pvr))
         else:
             z['cand_score']=z['base_score']
         if highvol:
@@ -311,13 +322,13 @@ def sideways_optimizer_validation(symbols, period="5y", top_n=3, warmup_months=1
                 rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),
                 vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<top_n: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
         rs63=_pct(z.rs63); rs21=_pct(z.rs21); r63=_pct(z.r63); r126=_pct(z.r126); lowvol=_pct(z.vol,False); d52=_pct(z.d52); vr=_pct(z.vr)
-        base=.25*rs63+.15*rs21+.15*r63+.10*r126+.10*trend+.10*lowvol+.10*d52+.05*vr
+        base=base_score(rs63,rs21,r63,r126,trend,lowvol,d52,vr)
         scores={"BASE":base}
         if regime=="SIDEWAYS":
             scores["RS"]=.40*rs63+.25*rs21+.08*r63+.04*r126+.10*trend+.05*lowvol+.05*d52+.03*vr
-            scores["QUALITY"]=.22*rs63+.12*rs21+.08*r63+.05*r126+.23*trend+.20*lowvol+.07*d52+.03*vr
+            scores["QUALITY"]=sideways_score(rs63,rs21,r63,r126,trend,lowvol,d52,vr)
             scores["BALANCED"]=.32*rs63+.18*rs21+.08*r63+.05*r126+.17*trend+.12*lowvol+.05*d52+.03*vr
         else:
             scores.update({"RS":base,"QUALITY":base,"BALANCED":base})
@@ -388,11 +399,11 @@ def sideways_holdout_confirmation(symbols, period="10y", top_n=3):
             if any(pd.isna(r[k]) for k in keys): continue
             q.append(dict(symbol=s.replace(".NS",""),price=float(r.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<top_n: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
         rs63=_pct(z.rs63); rs21=_pct(z.rs21); r63=_pct(z.r63); r126=_pct(z.r126); lowvol=_pct(z.vol,False); d52=_pct(z.d52); vr=_pct(z.vr)
-        base=.25*rs63+.15*rs21+.15*r63+.10*r126+.10*trend+.10*lowvol+.10*d52+.05*vr
+        base=base_score(rs63,rs21,r63,r126,trend,lowvol,d52,vr)
         # Frozen v1.5 winner. Do not change these weights in v1.6.
-        quality=.22*rs63+.12*rs21+.08*r63+.05*r126+.23*trend+.20*lowvol+.07*d52+.03*vr if regime=="SIDEWAYS" else base
+        quality=sideways_score(rs63,rs21,r63,r126,trend,lowvol,d52,vr) if regime=="SIDEWAYS" else base
         nr=float((z.iloc[0].fnifty/z.iloc[0].nifty-1)*100)
         for score,target in [(base,base_rows),(quality,cand_rows)]:
             p=z.assign(_score=score).nlargest(top_n,"_score").copy(); pr=float(((p.future/p.price-1)*100).mean())
@@ -455,9 +466,9 @@ def stress_robustness_validation(symbols, period="10y"):
               r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),
               vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<5: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
         feats=[_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr)]
-        base=.25*feats[0]+.15*feats[1]+.15*feats[2]+.10*feats[3]+.10*feats[4]+.10*feats[5]+.10*feats[6]+.05*feats[7]
+        base=base_score(*feats)
         nr=float((z.iloc[0].fnifty/z.iloc[0].nifty-1)*100)
         for name,w in weight_sets.items():
             score=sum(float(wi)*fi for wi,fi in zip(w,feats)) if regime=="SIDEWAYS" else base
@@ -538,9 +549,9 @@ def execution_cost_validation(symbols, period="10y"):
               r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),
               vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),future=float(f.Close),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<5: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
         feats=[_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr)]
-        base=.25*feats[0]+.15*feats[1]+.15*feats[2]+.10*feats[3]+.10*feats[4]+.10*feats[5]+.10*feats[6]+.05*feats[7]
+        base=base_score(*feats)
         score=sum(float(wi)*fi for wi,fi in zip(frozen_w,feats)) if regime=="SIDEWAYS" else base
         pick=z.assign(_score=score).nlargest(3,"_score")
         pr=float(((pick.future/pick.price-1)*100).mean())
@@ -622,9 +633,9 @@ def realistic_portfolio_simulation(symbols, period="10y", initial_capital=100000
             if any(pd.isna(r[k]) for k in keys): continue
             q.append(dict(symbol=s.replace(".NS",""),price=float(r.Close),future=float(f.Close),r21=float(r.R21),r63=float(r.R63),r126=float(r.R126),rs21=float(r.RS21),rs63=float(r.RS63),e50=float(r.E50),e200=float(r.E200),vol=float(r.VOL),d52=float(r.D52),vr=float(r.VR),nifty=float(r.NIFTY),fnifty=float(f.NIFTY)))
         if len(q)<5: continue
-        z=pd.DataFrame(q); trend=np.where((z.price>z.e50)&(z.e50>z.e200),100,np.where(z.price>z.e200,60,20))
+        z=pd.DataFrame(q); trend=trend_component(z.price,z.e50,z.e200)
         feats=[_pct(z.rs63),_pct(z.rs21),_pct(z.r63),_pct(z.r126),trend,_pct(z.vol,False),_pct(z.d52),_pct(z.vr)]
-        base=.25*feats[0]+.15*feats[1]+.15*feats[2]+.10*feats[3]+.10*feats[4]+.10*feats[5]+.10*feats[6]+.05*feats[7]
+        base=base_score(*feats)
         score=sum(float(w)*f for w,f in zip(frozen_w,feats)) if regime=="SIDEWAYS" else base
         pick=z.assign(_score=score).nlargest(3,"_score")
         obs.append((dt,pick,float(z.iloc[0].nifty),float(z.iloc[0].fnifty),regime))
