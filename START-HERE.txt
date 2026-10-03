@@ -1,0 +1,8 @@
+1. CHANGE NAME: config/site.js -> recipientName: 'Avinash'
+2. NEW IMAGE: public/baby-batman.jpg (already replaced with clean upload)
+3. POSTGRES SETUP: Run database/setup.sql in pgAdmin Query Tool.
+4. CONFIGURATION: See .env.example; set real values in Vercel, never Git.
+5. DEPLOY: Import full repository into Vercel, preset Other, output public.
+6. VIEW RESPONSES: https://YOUR-DOMAIN/admin -> your ADMIN_PASSWORD.
+7. SEND INVITATION: Copy the full invitation link from the admin page.
+Read README.md for the exact steps and troubleshooting.

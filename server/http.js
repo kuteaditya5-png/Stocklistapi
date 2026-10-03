@@ -1,0 +1,3 @@
+export function json(res,status,data){res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');return res.status(status).json(data);}
+export function body(req){if(Number(req.headers['content-length']||0)>4096)throw Error('Request too large');const b=typeof req.body==='string'?JSON.parse(req.body):req.body;if(!b||typeof b!=='object'||Array.isArray(b))throw Error('Invalid body');return b;}
+export function failure(res,error){console.error('Request failed:',error.code||error.name||'Error');return json(res,503,{error:'Service unavailable. Check the database setup and server environment variables, then retry.'});}

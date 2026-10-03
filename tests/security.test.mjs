@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {session,isAdmin,equal,validSlot,invitationKey,trusted,cookie} from '../server/security.js';
+import admin from '../api/admin.js';import respond from '../api/respond.js';
+process.env.SESSION_SECRET='x'.repeat(64);process.env.INVITATION_TOKEN='y'.repeat(64);process.env.APP_URL='https://example.test';
+const res=()=>({headers:{},statusCode:0,setHeader(k,v){this.headers[k]=v},status(n){this.statusCode=n;return this},json(v){this.data=v;return this}});
+test('signed session rejects tampering and missing cookies',()=>{const s=session();assert.equal(isAdmin({headers:{cookie:'gotham_admin='+s}}),true);assert.equal(isAdmin({headers:{cookie:'gotham_admin='+s+'bad'}}),false);assert.equal(isAdmin({headers:{}}),false);assert.match(cookie(s),/HttpOnly; SameSite=Strict/);assert.match(cookie(s),/Secure/)});
+test('server date validation checks calendar and IST',()=>{const now=Date.parse('2026-09-29T00:00:00Z');assert.equal(validSlot('2026-10-10','19:00',now),true);assert.equal(validSlot('2026-02-30','19:00',Date.parse('2026-01-01')),false);assert.equal(validSlot('2026-09-29','05:29',now),false);assert.equal(validSlot('2026-09-29','05:31',now),true);assert.equal(validSlot('2026-10-10','24:00',now),false);assert.equal(validSlot('2029-01-01','19:00',now),false)});
+test('invitation keys change with recipient or invitation ID',()=>{assert.notEqual(invitationKey('Avinash','1'),invitationKey('Someone else','1'));assert.notEqual(invitationKey('Avinash','1'),invitationKey('Avinash','2'));assert.equal(equal('a','b'),false)});
+test('admin data rejects anonymous users without touching database',async()=>{const r=res();await admin({method:'GET',headers:{}},r);assert.equal(r.statusCode,401)});
+test('write API rejects wrong origin and invalid invitation',async()=>{let r=res();await respond({method:'POST',headers:{origin:'https://evil.test'},body:{}},r);assert.equal(r.statusCode,403);r=res();await respond({method:'POST',headers:{origin:'https://example.test'},body:{token:'bad'}},r);assert.equal(r.statusCode,403);assert.equal(trusted({headers:{origin:'https://example.test'}}),true)});
