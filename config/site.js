@@ -1,6 +1,6 @@
-// CHANGE THE RECIPIENT NAME HERE, then commit and push to GitHub.
+// Legacy invitation only: imported automatically once. Create new names in /admin.
 export const siteConfig = {
-  recipientName: 'Murnali',
+  recipientName: 'Avinash',
   // Change this ID for a fresh invitation to the SAME person after a test response.
   invitationId: 'date-001',
   timezone: 'Asia/Kolkata'
