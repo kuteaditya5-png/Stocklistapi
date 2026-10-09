@@ -1,0 +1,51 @@
+GOTHAM DASHBOARD UPDATE — 6 OCTOBER 2026
+
+INSTALL IN THIS ORDER
+1. Back up your current project and database.
+2. Open Neon SQL Editor for the same database used by Vercel DATABASE_URL.
+3. Run database/upgrade-dashboard.sql. It preserves existing responses.
+   For a brand-new database, run database/setup.sql instead.
+4. Extract this ZIP. Copy the contents of the gotham folder into your existing
+   Stocklistapi repository root, replacing the old files. Do not nest gotham
+   inside your repository. Keep your own .env.local file if you have one.
+5. Commit and push to GitHub, then wait for the Vercel Production deployment
+   to finish. No environment variable changes are required.
+6. Open https://a-date-in-gotham.vercel.app/admin and refresh the page.
+   Sign in with your existing ADMIN_PASSWORD.
+
+USING THE DASHBOARD
+- Click + New invitation, type the recipient name, and click Generate link.
+- Copy the complete link from that recipient's card.
+- Up to 10 links may be active at once. Your existing invitation counts as one.
+- The same name can have multiple separate links. Each gets its own response.
+- Names and links stay saved after refreshing or redeploying.
+- Delete link disables one invitation and frees one slot.
+- Reset all links asks for confirmation, then disables every active link.
+  Old links stop opening and cannot submit responses, even from an open tab.
+  Previously saved responses remain visible. You can then create 10 new links.
+- Revoked records remain in the database so old links cannot be reactivated
+  accidentally. They are removed from the active dashboard list.
+- Each link accepts one confirmed response. Coffee, movie, sunset and dinner
+  choices are included.
+
+EXISTING INVITATION
+The existing INVITATION_TOKEN and config/site.js name are imported once on
+first use. After that, create invitations in the dashboard. Editing site.js
+will no longer change the imported name. Keep existing environment variables.
+Reset also disables the old INVITATION_TOKEN link permanently in this database.
+
+MAIN CHANGED FILES
+public/admin.html, public/admin.js, public/styles.css
+api/admin.js, api/invitation.js, api/respond.js
+server/invitations.js (new)
+database/upgrade-dashboard.sql (new), database/setup.sql
+config/site.js (comment only)
+The ZIP includes the full project and the earlier date-idea update.
+
+VALIDATION
+npm install
+npm test
+Tests cover authentication/origin checks, recipient lookup, duplicate responses,
+all four date ideas, link lifecycle, 10-link limit, reset, revocation and rollback.
+API tests use a stateful database double; validate the deployed app against Neon
+with a test invitation after deployment.

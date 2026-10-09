@@ -1,0 +1,7 @@
+DATE IDEAS UPDATE
+1. Run database/upgrade-date-ideas.sql in Neon SQL Editor on your existing database BEFORE deployment.
+2. Copy these changed files into the same paths in your GitHub repository: public/index.html, public/invitation.js, public/styles.css, public/admin.js, api/respond.js, api/admin.js, server/http.js, database/setup.sql, database/upgrade-date-ideas.sql.
+3. Commit and push; wait for Vercel Ready. Keep existing Vercel environment values and your current config/site.js.
+4. Open the invitation link from /admin. Yes -> choose one idea -> date/time -> confirm. Check /admin for the idea.
+Existing responses remain and show Not selected (earlier response). Already-confirmed invitations still cannot submit again.
+This ZIP is based on your uploaded source. Do not overwrite a personalized config/site.js with the sample Avinash configuration.
